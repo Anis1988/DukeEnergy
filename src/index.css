@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Light: warm paper + teal bars. Dark: deep slate + brighter teal. Values are "R G B". */
+:root, .light {
+  --bg: 244 246 243; --card: 255 255 255; --ink: 22 32 38; --muted: 96 110 118; --line: 222 228 226; --grid: 232 236 234;
+  --bar: 38 150 140; --strong: 12 92 86; --temp: 214 116 42; --accent: 12 120 112;
+  --good: 30 130 76; --warn: 176 112 10; --bad: 190 54 54;
+  color-scheme: light;
+}
+.dark {
+  --bg: 14 20 24; --card: 22 30 36; --ink: 230 236 238; --muted: 150 164 170; --line: 40 52 60; --grid: 34 45 52;
+  --bar: 52 178 166; --strong: 140 230 218; --temp: 236 150 80; --accent: 80 200 188;
+  --good: 80 190 120; --warn: 230 170 60; --bad: 240 110 110;
+  color-scheme: dark;
+}
+
+html, body { background: rgb(var(--bg)); color: rgb(var(--ink)); }
+body { @apply font-sans antialiased; -webkit-tap-highlight-color: transparent; }
+#root { min-height: 100dvh; }
+
+@layer components {
+  .card { @apply rounded-2xl border border-line bg-card p-4 shadow-[0_1px_2px_rgb(0_0_0/0.04)]; }
+  .label { @apply text-xs font-semibold uppercase tracking-wide text-muted; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-card px-4 py-2.5 text-sm font-semibold text-ink transition active:scale-[0.97] disabled:opacity-50; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition active:scale-[0.97] disabled:opacity-50 dark:text-bg; }
+  .input { @apply w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base text-ink outline-none focus:border-accent; }
+  .tip { @apply pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-line bg-card px-2.5 py-1.5 text-xs text-ink shadow-lg; }
+  .chip { @apply rounded-full border border-line px-3 py-1.5 text-sm font-medium text-muted transition; }
+  .chip[aria-pressed='true'] { @apply border-accent bg-accent/10 text-accent; }
+}
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
