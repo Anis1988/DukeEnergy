@@ -22,6 +22,7 @@ import android.widget.TextView;
  * handed back and this screen closes. Nothing typed here is read by the app.
  */
 public class LoginActivity extends Activity {
+    private static final String IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1";
     private String prefix;
     private boolean done = false;
 
@@ -54,8 +55,9 @@ public class LoginActivity extends Activity {
         WebView web = new WebView(this);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
-        // Some login pages refuse "in-app" browsers: present as plain Chrome.
-        web.getSettings().setUserAgentString(web.getSettings().getUserAgentString().replace("; wv", ""));
+        // Duke's login gives a code only to iPhones (it is the iPhone app's login); anything else ends in
+        // error=access_denied. So this page presents itself as iPhone Safari.
+        web.getSettings().setUserAgentString(IPHONE_UA);
         CookieManager.getInstance().setAcceptCookie(true);
         web.setWebViewClient(new WebViewClient() {
             @Override
