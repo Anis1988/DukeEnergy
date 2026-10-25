@@ -8,3 +8,4 @@
 - Server imports end in `.js` (Vercel runs `api/` as Node ESM without bundling). `npm run dev` serves `api/*.ts` too (`vite.config.ts`).
 - Every API call needs `APP_ACCESS_TOKEN` (header `X-Access-Token`): the Duke login is stored on the server.
 - Do not add automated tests unless asked.
+- `android` branch only: `src/components/AppUpdate.tsx` (update banner from the GitHub release, mounted in `src/main.tsx`), `UpdatePlugin.java`, `DukeLoginPlugin.java` + `LoginActivity.java`, the sideload keystore (fixed key so new APKs install over old ones).
