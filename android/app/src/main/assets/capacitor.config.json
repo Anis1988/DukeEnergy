@@ -1,0 +1,15 @@
+{
+	"appId": "app.wattwatch",
+	"appName": "Watt Watch",
+	"webDir": "build",
+	"backgroundColor": "#F4F6F3",
+	"plugins": {
+		"CapacitorHttp": {
+			"enabled": true
+		},
+		"SystemBars": {
+			"style": "LIGHT",
+			"initialViewportFitValueHint": "cover"
+		}
+	}
+}

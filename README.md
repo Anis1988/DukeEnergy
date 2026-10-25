@@ -15,7 +15,7 @@ or the Android app from the `android` branch).
    cache of past days).
 3. Project → Settings → Environment Variables: `APP_ACCESS_TOKEN` = any long password (you type it once per device).
 4. Deployments → ⋯ → Redeploy, open the site, enter the access code.
-5. **Connect to Duke**: tap *Open Duke login*, log in on Duke's page. It ends on an "Access Denied" page: that's
+5. **Connect to Duke**: tap *Open Duke login*, log in on Duke's page. It only accepts iPhones: on a computer switch the browser to an iPhone in the developer tools (F12 → Ctrl+Shift+M → iPhone → reload), on Android use the app. It ends on a "Not Found" page: that's
    expected, copy that page's address, come back and paste it. (The Android app does this part by itself.)
 6. ⚙️ Settings → your price per kWh and basic charge (from a recent bill).
 

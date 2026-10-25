@@ -40,7 +40,7 @@ export function Guide() {
       </section>
       <section className="card space-y-2">
         <h3 className="font-semibold">🔑 Connecting</h3>
-        <p>You log in once on Duke’s own page. On the website, copy the address of the page you land on and paste it in. The Android app does that part by itself.</p>
+        <p>You log in once on Duke’s own page. On the website, copy the address of the page you land on and paste it in. Duke’s login only accepts iPhones, so on a computer switch the browser to “iPhone” first (the Connect screen shows how). The Android app does all of this by itself.</p>
       </section>
     </div>
   );
