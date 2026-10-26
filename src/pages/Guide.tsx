@@ -46,6 +46,7 @@ export function Guide() {
       <section className="card space-y-2">
         <h3 className="font-semibold">💲 Deals</h3>
         <p>In Ohio, Duke always delivers your power, but you can buy the electricity itself from another supplier, often cheaper. 💲 Deals reads Ohio’s official list of offers for Duke homes and prices each one on your own last 12 months. The top card is the best <b>safe</b> deal (fixed price, no teaser rate, small or no cancel fee) and how much it saves a year. Below, every offer with filters; tap one for its details, then Sign up or Call. If you already have a supplier, tap Change and type its price so savings are counted from it.</p>
+        <p><b>⚡ With electric cars:</b> a card shows what your cars cost a year, what a cheaper supplier saves on them, and Duke’s official night rate (Rate TD-CPP: cheaper midnight–5 AM every day, dearer 2–8 PM on summer weekdays) with the cars charging after midnight, for the cars and for your whole home. ⭐ Rate TD-CPP is also a choice in 💡 Insights → time-of-use plan.</p>
       </section>
       <section className="card space-y-2">
         <h3 className="font-semibold">🔔 Alerts</h3>

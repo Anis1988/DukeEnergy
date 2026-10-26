@@ -36,6 +36,8 @@ export interface Plan {
   peakEnd: number;
   /** Peak price only on Monday–Friday. */
   weekdaysOnly: boolean;
+  /** Peak price only May–September (Duke's summer). */
+  summerOnly: boolean;
   peak: number;
   offPeak: number;
   /** Optional cheap overnight window (same start and end = none). */
@@ -113,9 +115,9 @@ export interface Settings {
 
 /** Example numbers only: the real ones are in the plan's terms (Duke or your supplier). */
 export const PLAN_PRESETS: Record<string, Plan> = {
-  peak: { name: 'Peak / off-peak', peakStart: 14, peakEnd: 19, weekdaysOnly: true, peak: 0.28, offPeak: 0.12, nightStart: 0, nightEnd: 0, night: 0.12, fixed: 10 },
-  nights: { name: 'Free nights', peakStart: 0, peakEnd: 0, weekdaysOnly: false, peak: 0.19, offPeak: 0.19, nightStart: 21, nightEnd: 6, night: 0, fixed: 10 },
-  three: { name: 'Peak / off-peak / overnight', peakStart: 14, peakEnd: 19, weekdaysOnly: true, peak: 0.3, offPeak: 0.13, nightStart: 23, nightEnd: 6, night: 0.08, fixed: 10 },
+  peak: { name: 'Peak / off-peak', peakStart: 14, peakEnd: 19, weekdaysOnly: true, summerOnly: false, peak: 0.28, offPeak: 0.12, nightStart: 0, nightEnd: 0, night: 0.12, fixed: 10 },
+  nights: { name: 'Free nights', peakStart: 0, peakEnd: 0, weekdaysOnly: false, summerOnly: false, peak: 0.19, offPeak: 0.19, nightStart: 21, nightEnd: 6, night: 0, fixed: 10 },
+  three: { name: 'Peak / off-peak / overnight', peakStart: 14, peakEnd: 19, weekdaysOnly: true, summerOnly: false, peak: 0.3, offPeak: 0.13, nightStart: 23, nightEnd: 6, night: 0.08, fixed: 10 },
 };
 
 export const DEFAULT_SETTINGS: Settings = {
