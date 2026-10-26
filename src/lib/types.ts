@@ -62,6 +62,8 @@ export interface Ev {
 
 /** 💲 One supplier offer from Energy Choice Ohio (the electricity itself; Duke still delivers it). */
 export interface Offer {
+  /** Set by the server (for AI checks). */
+  id?: string;
   supplier: string;
   phone?: string;
   site?: string;
@@ -91,6 +93,34 @@ export interface Offers {
   offers: Offer[];
   checkedAt: string;
   source: string;
+}
+
+/** 🤖 The AI's deep check of one offer (its live website, contract and reputation). */
+export interface Gotcha {
+  severity: 'high' | 'medium' | 'low';
+  issue: string;
+  detail: string;
+  source: string;
+}
+export interface Verdict {
+  verdict: 'good' | 'caution' | 'avoid';
+  headline: string;
+  summary: string;
+  confirmed: { rate: string; term: string; cancel_fee: string; monthly_fee: string; after_term: string; other_fees: string };
+  gotchas: Gotcha[];
+  positives: string[];
+  yearly_cost: string;
+  recommendation: string;
+  sources: { title: string; url: string }[];
+}
+export interface AiCheck {
+  id: string;
+  status: 'running' | 'done' | 'error';
+  startedAt: string;
+  finishedAt?: string;
+  model?: string;
+  verdict?: Verdict;
+  error?: string;
 }
 
 /** Who you buy the electricity from now (Duke delivers it either way). rate 0 = Duke's standard price. */

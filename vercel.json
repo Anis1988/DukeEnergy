@@ -40,6 +40,9 @@
     },
     "api/alerts.ts": {
       "maxDuration": 120
+    },
+    "api/offers.ts": {
+      "maxDuration": 300
     }
   }
 }

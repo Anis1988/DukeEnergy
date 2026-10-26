@@ -19,6 +19,12 @@ or the Android app from the `android` branch).
    expected, copy that page's address, come back and paste it. (The Android app does this part by itself.)
 6. ⚙️ Settings → your price per kWh and basic charge (from a recent bill).
 
+## AI deep check (optional)
+
+💲 Deals → 🤖 Check this offer: Claude reads the supplier's live sign-up page and contract and gives a verdict. Add
+`ANTHROPIC_API_KEY` (console.anthropic.com → API keys) in Vercel → Settings → Environment Variables, then redeploy.
+About $1–3 per check; `AI_CHECK_DAILY_LIMIT` (default 10) caps checks per day; answers are kept 7 days.
+
 ## Alerts
 
 ⚙️ Settings → 🔔 Alerts: install the free **ntfy** app, subscribe to the topic shown, switch alerts on. Vercel runs the
