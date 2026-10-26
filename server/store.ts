@@ -65,6 +65,8 @@ export async function saveSettings(s: Partial<Settings>): Promise<Settings> {
       name: typeof u.name === 'string' ? u.name.slice(0, 80) : now.supply.name,
       rate: num(u.rate, 2) ?? now.supply.rate,
       monthlyFee: num(u.monthlyFee, 100) ?? now.supply.monthlyFee,
+      cancelFee: num(u.cancelFee, 2000) ?? now.supply.cancelFee,
+      endDate: typeof u.endDate === 'string' && /^(\d{4}-\d{2}-\d{2})?$/.test(u.endDate) ? u.endDate : now.supply.endDate,
     },
   };
   await db()?.set('de:settings', next);

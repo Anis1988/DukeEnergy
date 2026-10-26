@@ -110,6 +110,8 @@ export interface Verdict {
   gotchas: Gotcha[];
   positives: string[];
   yearly_cost: string;
+  /** How the offer fits this household (usage, seasons, cars, current contract, Duke's night rate). */
+  for_you: string;
   recommendation: string;
   sources: { title: string; url: string }[];
 }
@@ -128,6 +130,26 @@ export interface Supply {
   name: string;
   rate: number;
   monthlyFee: number;
+  /** Current supplier contract: cancel fee ($) and end date ("YYYY-MM-DD"), when known. */
+  cancelFee: number;
+  endDate: string;
+}
+
+/** 🤖 Your situation with Duke, sent with an AI check (no account numbers, no address). */
+export interface Situation {
+  yearKwh: number;
+  months: { m: string; kwh: number }[];
+  ptc: number | null;
+  ptcPeriod?: string;
+  /** All-in price per kWh and basic charge from Settings. */
+  price: number;
+  fixed: number;
+  supply: Supply;
+  cars: number;
+  chargerKw: number;
+  carKwhYear: number;
+  /** Share of car charging between midnight and 5 AM (0–1). */
+  carNightShare: number;
 }
 
 export interface Settings {
@@ -157,7 +179,7 @@ export const DEFAULT_SETTINGS: Settings = {
   alerts: { on: false, pct: 40, topic: '', goal: true },
   plan: PLAN_PRESETS.peak,
   ev: { cars: 0, chargerKw: 7.2, milesPerKwh: 3.5, excludeFromAlerts: true },
-  supply: { name: '', rate: 0, monthlyFee: 0 },
+  supply: { name: '', rate: 0, monthlyFee: 0, cancelFee: 0, endDate: '' },
 };
 
 export interface Status {
