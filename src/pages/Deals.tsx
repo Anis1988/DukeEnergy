@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { AiCheckPanel } from '../components/AiCheckPanel';
 import { Chips, ErrorBox, Spinner, useData } from '../components/ui';
-import { getOffers, getUsage, saveSettings } from '../lib/api';
+import { getOffers, getUsage, saveSettings, type CheckCtx } from '../lib/api';
 import { addDays, addMonths, money, monthStart } from '../lib/dates';
 import { band, findCharging } from '../lib/insights';
 import { RS_DISTRIBUTION, TARIFF_SOURCE, TDCPP, tdcppPlan } from '../lib/tariffs';
@@ -48,6 +49,8 @@ export function Deals({ serial, today, settings, onSaved }: { serial: string; to
   const nowRate = settings.supply.rate || ptc;
   const nowYear = yearKwh * nowRate + settings.supply.monthlyFee * 12;
   const cost = (o: Offer) => yearKwh * o.rate + o.monthlyFee * 12;
+  // What the AI deep check is told about this home.
+  const ctx: CheckCtx = { yearKwh, ptc: data.ptc, ptcPeriod: data.ptcPeriod, nowRate, nowName: settings.supply.rate ? settings.supply.name || 'a supplier' : 'Duke (standard)', cars: settings.ev.cars };
 
   const list = data.offers
     .filter((o) => (!f.fixed || o.type === 'Fixed') && (!f.noCancelFee || o.etf === 0) && (!f.noMonthlyFee || o.monthlyFee === 0) && (!f.green || o.renewable >= 100) && (f.term === 'any' || o.term >= Number(f.term)))
@@ -75,6 +78,7 @@ export function Deals({ serial, today, settings, onSaved }: { serial: string; to
               </div>
             </div>
             <OfferActions o={best} />
+            <AiCheckPanel offer={best} ctx={ctx} />
           </>
         ) : (
           <p className="text-sm">✅ You already pay about as little as the safe offers. Nothing worth switching for right now.</p>
@@ -141,6 +145,7 @@ export function Deals({ serial, today, settings, onSaved }: { serial: string; to
                     {o.etfDetails && <p className="text-muted">Cancelling: {o.etfDetails}</p>}
                     <p className="text-muted">Renewable: {o.renewable}%{o.phone ? ` · ☎ ${o.phone}` : ''}</p>
                     <OfferActions o={o} />
+                    <AiCheckPanel offer={o} ctx={ctx} />
                   </div>
                 )}
               </li>
