@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { AiCheckPanel } from '../components/AiCheckPanel';
 import { Chips, ErrorBox, Spinner, useData } from '../components/ui';
-import { getOffers, getUsage, saveSettings, type CheckCtx } from '../lib/api';
+import { getOffers, getUsage, saveSettings } from '../lib/api';
 import { addDays, addMonths, money, monthStart } from '../lib/dates';
 import { band, findCharging } from '../lib/insights';
 import { RS_DISTRIBUTION, TARIFF_SOURCE, TDCPP, tdcppPlan } from '../lib/tariffs';
-import type { Offer, Point, Settings } from '../lib/types';
+import type { Offer, Point, Settings, Situation } from '../lib/types';
 
 type Term = 'any' | '12' | '24';
 interface Filters { fixed: boolean; noCancelFee: boolean; noMonthlyFee: boolean; green: boolean; term: Term }
@@ -32,6 +32,9 @@ export function Deals({ serial, today, settings, onSaved }: { serial: string; to
   // Same request as 📆 Months (13 months, answered from memory when already loaded); the last 365 days are used.
   const first = addMonths(monthStart(end), -12);
   const year = useData(`m:${serial}:${first}:${end}`, () => getUsage(serial, 'DAILY', first, end));
+  // With cars: 8 weeks of hourly use (same request as 💡 Insights and the ⚡ card) for the AI's picture of charging.
+  const hStart = addDays(end, -55);
+  const hourly = useData(settings.ev.cars > 0 ? `hh:${serial}:${hStart}:${end}` : null, () => getUsage(serial, 'HOURLY', hStart, end));
   const [f, setF] = useState<Filters>(loadFilters);
   const [shown, setShown] = useState(10);
   const [open, setOpen] = useState<number | null>(null);
@@ -50,7 +53,7 @@ export function Deals({ serial, today, settings, onSaved }: { serial: string; to
   const nowYear = yearKwh * nowRate + settings.supply.monthlyFee * 12;
   const cost = (o: Offer) => yearKwh * o.rate + o.monthlyFee * 12;
   // What the AI deep check is told about this home.
-  const ctx: CheckCtx = { yearKwh, ptc: data.ptc, ptcPeriod: data.ptcPeriod, nowRate, nowName: settings.supply.rate ? settings.supply.name || 'a supplier' : 'Duke (standard)', cars: settings.ev.cars };
+  const situation = mySituation(settings, pts, yearKwh, data.ptc, data.ptcPeriod, hourly.data?.points ?? []);
 
   const list = data.offers
     .filter((o) => (!f.fixed || o.type === 'Fixed') && (!f.noCancelFee || o.etf === 0) && (!f.noMonthlyFee || o.monthlyFee === 0) && (!f.green || o.renewable >= 100) && (f.term === 'any' || o.term >= Number(f.term)))
@@ -78,7 +81,7 @@ export function Deals({ serial, today, settings, onSaved }: { serial: string; to
               </div>
             </div>
             <OfferActions o={best} />
-            <AiCheckPanel offer={best} ctx={ctx} />
+            <AiCheckPanel offer={best} situation={situation} />
           </>
         ) : (
           <p className="text-sm">✅ You already pay about as little as the safe offers. Nothing worth switching for right now.</p>
@@ -145,7 +148,7 @@ export function Deals({ serial, today, settings, onSaved }: { serial: string; to
                     {o.etfDetails && <p className="text-muted">Cancelling: {o.etfDetails}</p>}
                     <p className="text-muted">Renewable: {o.renewable}%{o.phone ? ` · ☎ ${o.phone}` : ''}</p>
                     <OfferActions o={o} />
-                    <AiCheckPanel offer={o} ctx={ctx} />
+                    <AiCheckPanel offer={o} situation={situation} />
                   </div>
                 )}
               </li>
@@ -184,13 +187,43 @@ function OfferActions({ o }: { o: Offer }) {
   );
 }
 
+/** Your situation with Duke, for the AI: no account number or address, only use and prices. */
+function mySituation(settings: Settings, pts: Point[], yearKwh: number, ptc: number | null, ptcPeriod: string | undefined, hours: Point[]): Situation {
+  const byMonth = new Map<string, number>();
+  for (const p of pts) byMonth.set(p.t.slice(0, 7), (byMonth.get(p.t.slice(0, 7)) ?? 0) + p.kwh);
+  const ev = settings.ev;
+  let carKwhYear = 0;
+  let carNightShare = 0;
+  if (ev.cars > 0 && hours.length) {
+    const found = findCharging(hours, ev.chargerKw);
+    const days = new Set(hours.map((p) => p.t.slice(0, 10))).size || 1;
+    carKwhYear = (found.total / days) * 365;
+    let night = 0;
+    for (const [t, k] of found.byHour) if (Number(t.slice(11, 13)) < 5) night += k;
+    carNightShare = found.total ? night / found.total : 0;
+  }
+  return {
+    yearKwh: Math.round(yearKwh),
+    months: [...byMonth.entries()].sort().map(([m, kwh]) => ({ m, kwh: Math.round(kwh) })),
+    ptc,
+    ptcPeriod,
+    price: settings.price,
+    fixed: settings.fixed,
+    supply: settings.supply,
+    cars: ev.cars,
+    chargerKw: ev.chargerKw,
+    carKwhYear: Math.round(carKwhYear),
+    carNightShare: Math.round(carNightShare * 100) / 100,
+  };
+}
+
 /** "I already buy from a supplier": their price, so savings are counted from it. */
 function SupplyForm({ settings, onSaved }: { settings: Settings; onSaved: () => void }) {
-  const [v, setV] = useState({ name: settings.supply.name, rate: settings.supply.rate ? String(settings.supply.rate) : '', fee: settings.supply.monthlyFee ? String(settings.supply.monthlyFee) : '' });
+  const [v, setV] = useState({ name: settings.supply.name, rate: settings.supply.rate ? String(settings.supply.rate) : '', fee: settings.supply.monthlyFee ? String(settings.supply.monthlyFee) : '', cancel: settings.supply.cancelFee ? String(settings.supply.cancelFee) : '', end: settings.supply.endDate });
   const [err, setErr] = useState('');
   const save = async (duke: boolean) => {
     try {
-      await saveSettings({ supply: duke ? { name: '', rate: 0, monthlyFee: 0 } : { name: v.name.trim(), rate: Number(v.rate) || 0, monthlyFee: Number(v.fee) || 0 } });
+      await saveSettings({ supply: duke ? { name: '', rate: 0, monthlyFee: 0, cancelFee: 0, endDate: '' } : { name: v.name.trim(), rate: Number(v.rate) || 0, monthlyFee: Number(v.fee) || 0, cancelFee: Number(v.cancel) || 0, endDate: v.end } });
       onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -203,6 +236,8 @@ function SupplyForm({ settings, onSaved }: { settings: Settings; onSaved: () => 
       <div className="grid grid-cols-2 gap-2">
         <input className="input" inputMode="decimal" placeholder="$/kWh, e.g. 0.0999" value={v.rate} onChange={(e) => setV({ ...v, rate: e.target.value })} />
         <input className="input" inputMode="decimal" placeholder="Monthly fee $" value={v.fee} onChange={(e) => setV({ ...v, fee: e.target.value })} />
+        <input className="input" inputMode="decimal" placeholder="Cancel fee $ (if any)" value={v.cancel} onChange={(e) => setV({ ...v, cancel: e.target.value })} />
+        <label className="text-xs text-muted">Contract ends<input type="date" className="input mt-1" value={v.end} onChange={(e) => setV({ ...v, end: e.target.value })} /></label>
       </div>
       <div className="flex flex-wrap gap-2">
         <button className="btn-primary" disabled={!(Number(v.rate) > 0)} onClick={() => void save(false)}>Save</button>

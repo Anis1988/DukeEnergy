@@ -1,5 +1,5 @@
 import { apiUrl, getServer, isNative } from './native';
-import type { Meter, Settings, Status, Usage, Offers, AiCheck } from './types';
+import type { Meter, Settings, Status, Usage, Offers, AiCheck, Situation } from './types';
 
 const CODE_KEY = 'ww.accessCode';
 export const getCode = () => { try { return localStorage.getItem(CODE_KEY) ?? ''; } catch { return ''; } };
@@ -33,9 +33,9 @@ export const saveSettings = (settings: Partial<Settings>) => call<{ settings: Se
 export const getSent = () => call<{ sent: { at: string; title: string; text: string }[] }>('/api/alerts');
 export const testAlert = () => call<{ ok: boolean }>('/api/alerts', { method: 'POST', body: JSON.stringify({ test: true }) });
 export const getOffers = (fresh = false) => call<Offers>(`/api/offers${fresh ? '?fresh=1' : ''}`);
-export interface CheckCtx { yearKwh: number; ptc: number | null; ptcPeriod?: string; nowRate: number; nowName: string; cars: number }
 export const getAiCheck = (id: string) => call<AiCheck | { id: string; status: 'none' }>(`/api/offers?check=${encodeURIComponent(id)}`);
-export const startAiCheck = (id: string, ctx: CheckCtx, fresh = false) => call<AiCheck>('/api/offers', { method: 'POST', body: JSON.stringify({ id, ctx, fresh }) });
+/** Only on "Ask AI": the saved answer for this offer + situation (free), or a new check (fresh = always new). */
+export const askAi = (offerId: string, situation: Situation, fresh = false) => call<AiCheck & { saved?: boolean }>('/api/offers', { method: 'POST', body: JSON.stringify({ id: offerId, situation, fresh }) });
 export const getMeters = (fresh = false) => call<{ meters: Meter[]; today: string }>(`/api/usage?meters=1${fresh ? '&fresh=1' : ''}`);
 export const getUsage = (serial: string, interval: 'HOURLY' | 'DAILY', start: string, end: string) =>
   call<Usage>(`/api/usage?${new URLSearchParams({ serial, interval, start, end })}`);

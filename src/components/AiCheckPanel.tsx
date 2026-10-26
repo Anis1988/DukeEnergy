@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { getAiCheck, startAiCheck, type CheckCtx } from '../lib/api';
-import type { AiCheck, Offer } from '../lib/types';
+import { askAi, getAiCheck } from '../lib/api';
+import type { AiCheck, Offer, Situation } from '../lib/types';
 
 const LOOK = {
   good: { icon: '✅', label: 'Looks good', tone: 'text-good border-good/40 bg-good/5' },
@@ -10,57 +10,53 @@ const LOOK = {
 const SEV = { high: '🔴', medium: '🟠', low: '🟡' } as const;
 
 /**
- * 🤖 Deep check: the AI reads the offer's live website, contract and complaints and gives a verdict. Runs on the
- * server in the background (1–5 minutes), so the screen can be left; results are kept 7 days.
+ * 🤖 Ask AI: nothing is sent until the user taps the button. Then the server gives back the saved answer for this
+ * offer and situation (free) or starts a new check: the AI reads the offer's live website and contract and judges it
+ * against the household's own situation with Duke. Runs on the server (1–5 minutes), so the screen can be left.
  */
-export function AiCheckPanel({ offer, ctx }: { offer: Offer; ctx: CheckCtx }) {
-  const [c, setC] = useState<AiCheck | null>(null);
+export function AiCheckPanel({ offer, situation }: { offer: Offer; situation: Situation }) {
+  const [c, setC] = useState<(AiCheck & { saved?: boolean }) | null>(null);
   const [err, setErr] = useState('');
-  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const timer = useRef<number>();
-  const id = offer.id ?? '';
-
-  const poll = () => {
-    getAiCheck(id)
-      .then((r) => {
-        setLoaded(true);
-        if (r.status === 'none') return setC(null);
-        setC(r as AiCheck);
-        if (r.status === 'running') timer.current = window.setTimeout(poll, 6000);
-      })
-      .catch((e) => { setLoaded(true); setErr(e instanceof Error ? e.message : String(e)); });
-  };
   useEffect(() => {
-    if (id) poll();
     const t = window.setInterval(() => setNow(Date.now()), 1000);
     return () => { window.clearTimeout(timer.current); window.clearInterval(t); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, []);
+  if (!offer.id) return null;
 
-  const start = async (fresh = false) => {
+  const poll = (id: string) => {
+    getAiCheck(id)
+      .then((r) => {
+        if (r.status === 'none') return;
+        setC(r as AiCheck);
+        if (r.status === 'running') timer.current = window.setTimeout(() => poll(id), 6000);
+      })
+      .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
+  };
+  const ask = async (fresh: boolean) => {
     setErr('');
+    setBusy(true);
     try {
-      const r = await startAiCheck(id, ctx, fresh);
+      const r = await askAi(offer.id!, situation, fresh);
       setC(r);
       window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(poll, 5000);
+      if (r.status === 'running') timer.current = window.setTimeout(() => poll(r.id), 5000);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
     }
   };
-
-  if (!id) return null;
-  if (!loaded) return <p className="text-xs text-muted">🤖 Looking for an earlier AI check…</p>;
 
   if (!c || c.status === 'error') {
     return (
       <div className="space-y-2 rounded-xl border border-line p-3 text-sm">
-        <p><b>🤖 Deep check with AI</b></p>
-        <p className="text-xs text-muted">Claude (Anthropic’s most capable model) opens this offer’s live sign-up page and contract, looks up complaints, and tells you if there’s a catch. Takes 1–5 minutes; you can leave this screen. Costs about $1–3 in AI credit; the answer is kept 7 days.</p>
+        <button className="btn w-full" onClick={() => void ask(false)} disabled={busy}>{busy ? 'Asking…' : '🤖 Ask AI about this offer'}</button>
+        <p className="text-xs text-muted">Only when you tap. Claude (Anthropic’s most capable AI) reads this offer’s live website and contract and judges it for your situation (what you pay now, your seasons{situation.cars ? ', your cars and night charging' : ''}). About $1–3 a check, 1–5 minutes; an answer you already got is shown again for free.</p>
         {c?.error && <p className="text-xs text-bad">Last try failed: {c.error}</p>}
         {err && <p className="text-xs text-bad">⚠️ {err}</p>}
-        <button className="btn-primary" onClick={() => void start(true)}>🤖 Check this offer</button>
       </div>
     );
   }
@@ -72,7 +68,7 @@ export function AiCheckPanel({ offer, ctx }: { offer: Offer; ctx: CheckCtx }) {
         <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-line border-t-accent" />
         <div>
           <p><b>🤖 Reading the supplier’s website and contract…</b></p>
-          <p className="text-xs text-muted">{Math.floor(secs / 60)}:{String(secs % 60).padStart(2, '0')} so far · usually 1–5 minutes · you can leave this screen</p>
+          <p className="text-xs text-muted">{Math.floor(secs / 60)}:{String(secs % 60).padStart(2, '0')} so far · usually 1–5 minutes · you can leave this screen and tap Ask AI again later</p>
         </div>
       </div>
     );
@@ -87,6 +83,12 @@ export function AiCheckPanel({ offer, ctx }: { offer: Offer; ctx: CheckCtx }) {
         <p className="font-medium text-ink">{v.headline}</p>
       </div>
       <p className="text-ink">{v.summary}</p>
+      {v.for_you && (
+        <div className="rounded-lg bg-card/70 p-2.5 text-ink">
+          <p className="label">For you</p>
+          <p className="mt-0.5">{v.for_you}</p>
+        </div>
+      )}
       {v.gotchas.length > 0 && (
         <div className="text-ink">
           <p className="label">Catches found</p>
@@ -128,8 +130,8 @@ export function AiCheckPanel({ offer, ctx }: { offer: Offer; ctx: CheckCtx }) {
         </details>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
-        <span>🤖 Checked {new Date(c.finishedAt ?? c.startedAt).toLocaleString()}. AI can be wrong: read the contract before signing.</span>
-        <button className="btn px-3 py-1.5" onClick={() => void start(true)}>Check again</button>
+        <span>🤖 {c.saved ? 'Saved answer from' : 'Checked'} {new Date(c.finishedAt ?? c.startedAt).toLocaleString()}. AI can be wrong: read the contract before signing.</span>
+        <button className="btn px-3 py-1.5" onClick={() => void ask(true)} disabled={busy}>Ask again (new check)</button>
       </div>
     </div>
   );
