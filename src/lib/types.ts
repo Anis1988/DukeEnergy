@@ -117,6 +117,13 @@ export interface Verdict {
 }
 export interface AiCheck {
   id: string;
+  /** The offer it is about (shown in the AI verdicts list). */
+  offerId?: string;
+  supplier?: string;
+  rate?: number;
+  term?: number;
+  type?: 'Fixed' | 'Variable';
+  thoroughness?: 'quick' | 'normal' | 'deep';
   status: 'running' | 'done' | 'error';
   startedAt: string;
   finishedAt?: string;
@@ -163,6 +170,8 @@ export interface Settings {
   plan: Plan;
   ev: Ev;
   supply: Supply;
+  /** 🤖 AI check: which Anthropic model, how thorough. */
+  ai: { model: string; thoroughness: 'quick' | 'normal' | 'deep' };
 }
 
 /** Example numbers only: the real ones are in the plan's terms (Duke or your supplier). */
@@ -180,6 +189,7 @@ export const DEFAULT_SETTINGS: Settings = {
   plan: PLAN_PRESETS.peak,
   ev: { cars: 0, chargerKw: 7.2, milesPerKwh: 3.5, excludeFromAlerts: true },
   supply: { name: '', rate: 0, monthlyFee: 0, cancelFee: 0, endDate: '' },
+  ai: { model: 'claude-fable-5-1', thoroughness: 'normal' },
 };
 
 export interface Status {

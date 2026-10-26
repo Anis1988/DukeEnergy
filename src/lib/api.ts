@@ -33,6 +33,7 @@ export const saveSettings = (settings: Partial<Settings>) => call<{ settings: Se
 export const getSent = () => call<{ sent: { at: string; title: string; text: string }[] }>('/api/alerts');
 export const testAlert = () => call<{ ok: boolean }>('/api/alerts', { method: 'POST', body: JSON.stringify({ test: true }) });
 export const getOffers = (fresh = false) => call<Offers>(`/api/offers${fresh ? '?fresh=1' : ''}`);
+export const getAiChecks = () => call<{ checks: AiCheck[] }>('/api/offers?checks=1');
 export const getAiCheck = (id: string) => call<AiCheck | { id: string; status: 'none' }>(`/api/offers?check=${encodeURIComponent(id)}`);
 /** Only on "Ask AI": the saved answer for this offer + situation (free), or a new check (fresh = always new). */
 export const askAi = (offerId: string, situation: Situation, fresh = false) => call<AiCheck & { saved?: boolean }>('/api/offers', { method: 'POST', body: JSON.stringify({ id: offerId, situation, fresh }) });
