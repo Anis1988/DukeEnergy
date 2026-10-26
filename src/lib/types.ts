@@ -58,6 +58,46 @@ export interface Ev {
   excludeFromAlerts: boolean;
 }
 
+/** 💲 One supplier offer from Energy Choice Ohio (the electricity itself; Duke still delivers it). */
+export interface Offer {
+  supplier: string;
+  phone?: string;
+  site?: string;
+  signUp?: string;
+  terms?: string;
+  details?: string;
+  /** $ per kWh. */
+  rate: number;
+  type: 'Fixed' | 'Variable';
+  /** % renewable. */
+  renewable: number;
+  /** An introductory price (changes after the first months). */
+  intro: boolean;
+  /** Months (0 = month to month). */
+  term: number;
+  /** Early termination (cancel) fee in $; per remaining month when etfPerMonth. */
+  etf: number;
+  etfPerMonth: boolean;
+  etfDetails?: string;
+  monthlyFee: number;
+  promo?: string;
+}
+export interface Offers {
+  /** Duke's standard generation price ($/kWh), for the period below. */
+  ptc: number | null;
+  ptcPeriod?: string;
+  offers: Offer[];
+  checkedAt: string;
+  source: string;
+}
+
+/** Who you buy the electricity from now (Duke delivers it either way). rate 0 = Duke's standard price. */
+export interface Supply {
+  name: string;
+  rate: number;
+  monthlyFee: number;
+}
+
 export interface Settings {
   /** Price of one kWh, in dollars (all-in: energy + riders). */
   price: number;
@@ -68,6 +108,7 @@ export interface Settings {
   alerts: Alerts;
   plan: Plan;
   ev: Ev;
+  supply: Supply;
 }
 
 /** Example numbers only: the real ones are in the plan's terms (Duke or your supplier). */
@@ -84,6 +125,7 @@ export const DEFAULT_SETTINGS: Settings = {
   alerts: { on: false, pct: 40, topic: '', goal: true },
   plan: PLAN_PRESETS.peak,
   ev: { cars: 0, chargerKw: 7.2, milesPerKwh: 3.5, excludeFromAlerts: true },
+  supply: { name: '', rate: 0, monthlyFee: 0 },
 };
 
 export interface Status {

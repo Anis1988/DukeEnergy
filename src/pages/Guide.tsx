@@ -44,6 +44,10 @@ export function Guide() {
         <p>Set how many cars you charge at home and your charger’s power in ⚙️ Settings. The app spots charging in your hourly use (several hours far above your home’s normal level) and shows in 💡 Insights how much the cars use and cost, about how many miles that is, and what charging in a plan’s cheap hours would save. ⏱️ Hours marks the charging hours, and “high use” alerts leave car charging out, so a charging night doesn’t set them off.</p>
       </section>
       <section className="card space-y-2">
+        <h3 className="font-semibold">💲 Deals</h3>
+        <p>In Ohio, Duke always delivers your power, but you can buy the electricity itself from another supplier, often cheaper. 💲 Deals reads Ohio’s official list of offers for Duke homes and prices each one on your own last 12 months. The top card is the best <b>safe</b> deal (fixed price, no teaser rate, small or no cancel fee) and how much it saves a year. Below, every offer with filters; tap one for its details, then Sign up or Call. If you already have a supplier, tap Change and type its price so savings are counted from it.</p>
+      </section>
+      <section className="card space-y-2">
         <h3 className="font-semibold">🔔 Alerts</h3>
         <p>In ⚙️ Settings → Alerts: install the free ntfy app, subscribe to your topic, switch alerts on. Each morning you get a notification if yesterday was much higher than usual (you choose how much), if the month is heading over your goal, or if the Duke connection needs you.</p>
       </section>

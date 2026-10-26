@@ -1,5 +1,5 @@
 import { Redis } from '@upstash/redis';
-import { DEFAULT_SETTINGS, type Alerts, type Ev, type Plan, type Settings } from '../src/lib/types.js';
+import { DEFAULT_SETTINGS, type Alerts, type Ev, type Plan, type Settings, type Supply } from '../src/lib/types.js';
 import { LocalStore } from './localStore.js';
 
 /**
@@ -19,7 +19,7 @@ export const storeReady = () => !!db();
 
 export async function getSettings(): Promise<Settings> {
   const saved = (await db()?.get<Partial<Settings>>('de:settings')) ?? {};
-  return { ...DEFAULT_SETTINGS, ...saved, alerts: { ...DEFAULT_SETTINGS.alerts, ...saved.alerts }, plan: { ...DEFAULT_SETTINGS.plan, ...saved.plan }, ev: { ...DEFAULT_SETTINGS.ev, ...saved.ev } };
+  return { ...DEFAULT_SETTINGS, ...saved, alerts: { ...DEFAULT_SETTINGS.alerts, ...saved.alerts }, plan: { ...DEFAULT_SETTINGS.plan, ...saved.plan }, ev: { ...DEFAULT_SETTINGS.ev, ...saved.ev }, supply: { ...DEFAULT_SETTINGS.supply, ...saved.supply } };
 }
 
 const num = (v: unknown, max: number) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max ? v : undefined);
@@ -30,6 +30,7 @@ export async function saveSettings(s: Partial<Settings>): Promise<Settings> {
   const a: Partial<Alerts> = s.alerts ?? {};
   const p: Partial<Plan> = s.plan ?? {};
   const e: Partial<Ev> = s.ev ?? {};
+  const u: Partial<Supply> = s.supply ?? {};
   const next: Settings = {
     price: num(s.price, 5) ?? now.price,
     fixed: num(s.fixed, 500) ?? now.fixed,
@@ -58,6 +59,11 @@ export async function saveSettings(s: Partial<Settings>): Promise<Settings> {
       chargerKw: num(e.chargerKw, 50) || now.ev.chargerKw,
       milesPerKwh: num(e.milesPerKwh, 10) || now.ev.milesPerKwh,
       excludeFromAlerts: typeof e.excludeFromAlerts === 'boolean' ? e.excludeFromAlerts : now.ev.excludeFromAlerts,
+    },
+    supply: {
+      name: typeof u.name === 'string' ? u.name.slice(0, 80) : now.supply.name,
+      rate: num(u.rate, 2) ?? now.supply.rate,
+      monthlyFee: num(u.monthlyFee, 100) ?? now.supply.monthlyFee,
     },
   };
   await db()?.set('de:settings', next);
