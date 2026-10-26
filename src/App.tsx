@@ -6,6 +6,8 @@ import { getServer, isNative, setServer } from './lib/native';
 import { getMeter, setMeter } from './lib/prefs';
 import type { Status } from './lib/types';
 import { Connect } from './pages/Connect';
+import { useNow, VERDICT } from './components/AiCheckPanel';
+import { AiChecksProvider, useAiChecks } from './lib/aiChecks';
 import { Guide } from './pages/Guide';
 import { Deals } from './pages/Deals';
 import { Hourly } from './pages/Hourly';
@@ -92,7 +94,13 @@ export default function App() {
   else if (page === 'months') body = <Months serial={meter.serial} today={today} settings={status.settings} />;
   else body = <Overview serial={meter.serial} today={today} settings={status.settings} onDay={(d) => { setDay(d); setPage('hours'); }} />;
 
+  const openVerdicts = () => {
+    setPage('deals');
+    window.setTimeout(() => document.getElementById('ai-verdicts')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+  };
+
   return (
+    <AiChecksProvider enabled={connected}>
     <div className="mx-auto flex min-h-[100dvh] max-w-3xl flex-col px-4 pb-24 pt-[max(1rem,env(safe-area-inset-top))] sm:pb-8">
       <header className="mb-4 flex items-center justify-between gap-3">
         <button className="flex items-center gap-2" onClick={() => setPage('overview')}>
@@ -107,6 +115,7 @@ export default function App() {
 
       {/* Tabs: at the top on big screens, at the bottom (thumb reach) on phones. */}
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:static sm:mb-4 sm:rounded-2xl sm:border">
+        <AiTracker onOpen={openVerdicts} />
         <div className="mx-auto grid max-w-3xl grid-cols-6">
           {TABS.map(([p, icon, label]) => (
             <button key={p} onClick={() => setPage(p)} aria-current={page === p ? 'page' : undefined} className={`flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium sm:flex-row sm:justify-center sm:gap-2 sm:py-3 sm:text-sm ${page === p ? 'text-accent' : 'text-muted'}`}>
@@ -117,6 +126,34 @@ export default function App() {
       </nav>
 
       <main className="flex-1">{body}</main>
+    </div>
+    </AiChecksProvider>
+  );
+}
+
+/** 🤖 Above the tabs, on every page: the AI check that is running, then "verdict ready" when it finishes. */
+function AiTracker({ onOpen }: { onOpen: () => void }) {
+  const { checks, ready, dismiss } = useAiChecks();
+  const run = checks.find((c) => c.status === 'running');
+  const now = useNow(!!run);
+  if (!run && !ready) return null;
+  const v = ready?.verdict ? VERDICT[ready.verdict.verdict] : null;
+  const secs = run ? Math.max(0, Math.floor((now - Date.parse(run.startedAt)) / 1000)) : 0;
+  return (
+    <div className="mx-auto flex max-w-3xl items-center gap-2 border-b border-ai/30 bg-ai/10 px-3 py-2 text-xs text-ink sm:rounded-t-2xl">
+      {run ? (
+        <>
+          <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-ai/30 border-t-ai" />
+          <button className="min-w-0 flex-1 truncate text-left" onClick={onOpen}>🤖 AI is checking <b>{run.supplier}</b>… {Math.floor(secs / 60)}:{String(secs % 60).padStart(2, '0')}</button>
+        </>
+      ) : (
+        <>
+          <button className="min-w-0 flex-1 truncate text-left" onClick={() => { dismiss(); onOpen(); }}>
+            🤖 AI verdict ready: <b className={v?.tone}>{v ? `${v.icon} ${v.label}` : '⚠️ Failed'}</b> · {ready!.supplier}
+          </button>
+          <button className="px-1 text-muted" aria-label="Close" onClick={dismiss}>✕</button>
+        </>
+      )}
     </div>
   );
 }

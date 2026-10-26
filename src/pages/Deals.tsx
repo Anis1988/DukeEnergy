@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { AiCheckPanel } from '../components/AiCheckPanel';
+import { AiCheckPanel, VERDICT, VerdictBox } from '../components/AiCheckPanel';
+import { useAiChecks } from '../lib/aiChecks';
 import { Chips, ErrorBox, Spinner, useData } from '../components/ui';
 import { getOffers, getUsage, saveSettings } from '../lib/api';
 import { addDays, addMonths, money, monthStart } from '../lib/dates';
@@ -65,6 +66,8 @@ export function Deals({ serial, today, settings, onSaved }: { serial: string; to
 
   return (
     <div className="space-y-4">
+      <AiVerdicts />
+
       {/* The answer first. */}
       <section className="card space-y-3 border-accent/40">
         <p className="label">Best safe deal for your home</p>
@@ -128,6 +131,7 @@ export function Deals({ serial, today, settings, onSaved }: { serial: string; to
                 <button className="flex w-full items-start justify-between gap-3 text-left" onClick={() => setOpen(open === i ? null : i)} aria-expanded={open === i}>
                   <div className="min-w-0">
                     <p className="truncate font-medium">{o.supplier}</p>
+                    <AiChip offerId={o.id} />
                     <p className="text-xs text-muted">
                       {cents(o.rate)} · {o.type === 'Fixed' ? `fixed ${o.term} mo` : 'variable'}
                       {o.monthlyFee ? ` · ${money(o.monthlyFee)}/mo fee` : ''}
@@ -342,5 +346,53 @@ function CarsCard({ serial, end, settings, yearPts, best, nowRate }: { serial: s
       </p>
       <p className="text-xs text-muted">No supplier on Ohio’s list sells a “free nights” or EV plan for Duke homes right now; all their prices are the same at every hour.</p>
     </section>
+  );
+}
+
+/** 🤖 Every saved AI verdict (kept on the server, so they are here every time the app opens). */
+function AiVerdicts() {
+  const { checks } = useAiChecks();
+  const [open, setOpen] = useState<string | null>(null);
+  if (!checks.length) return null;
+  return (
+    <section id="ai-verdicts" className="card scroll-mt-4 space-y-2 border-ai/40">
+      <h2 className="font-display text-lg font-semibold text-ai">🤖 AI verdicts</h2>
+      <ul className="divide-y divide-line">
+        {checks.map((c) => {
+          const v = c.verdict ? VERDICT[c.verdict.verdict] : null;
+          return (
+            <li key={c.id} className="py-2">
+              <button className="flex w-full items-center justify-between gap-3 text-left" onClick={() => setOpen(open === c.id ? null : c.id)} aria-expanded={open === c.id}>
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{c.supplier ?? 'Offer'}</span>
+                  <span className="text-xs text-muted">{c.rate ? `${(c.rate * 100).toFixed(2)}¢ · ` : ''}{c.term ? `${c.term} mo · ` : ''}{new Date(c.finishedAt ?? c.startedAt).toLocaleDateString()}</span>
+                </span>
+                <span className={`shrink-0 text-sm font-semibold ${v?.tone ?? (c.status === 'running' ? 'text-ai' : 'text-bad')}`}>
+                  {c.status === 'running' ? '⏳ Checking…' : v ? `${v.icon} ${v.label}` : '⚠️ Failed'}
+                </span>
+              </button>
+              {open === c.id && (
+                <div className="mt-2">
+                  {c.status === 'done' && c.verdict ? <VerdictBox c={c} /> : <p className="text-sm text-muted">{c.status === 'running' ? 'Still checking. The verdict will appear here.' : c.error}</p>}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/** A small "AI said…" badge on offers that have a verdict. */
+function AiChip({ offerId }: { offerId?: string }) {
+  const { forOffer } = useAiChecks();
+  const c = offerId ? forOffer(offerId) : undefined;
+  if (!c) return null;
+  const v = c.verdict ? VERDICT[c.verdict.verdict] : null;
+  return (
+    <span className="mt-0.5 inline-block rounded-full border border-ai/40 bg-ai/10 px-2 py-0.5 text-[11px] font-semibold text-ai">
+      🤖 {c.status === 'running' ? 'checking…' : v ? `${v.icon} ${v.label}` : 'check failed'}
+    </span>
   );
 }

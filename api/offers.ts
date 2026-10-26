@@ -1,11 +1,17 @@
 import { waitUntil } from '@vercel/functions';
 import { guard, json } from '../server/guard.js';
 import { getOffers } from '../server/offers.js';
-import { checkId, cleanSituation, getCheck, offerId, runCheck, startCheck, takeDailySlot } from '../server/aicheck.js';
+import { checkId, cleanSituation, getCheck, listChecks, offerId, runCheck, startCheck, takeDailySlot } from '../server/aicheck.js';
+import { getSettings } from '../server/store.js';
+import type { AiCheck } from '../src/lib/types.js';
+
+/** A check that never finished (the server stopped it at its 5-minute limit) shows as failed. */
+const stale = (c: AiCheck): AiCheck =>
+  c.status === 'running' && Date.now() - Date.parse(c.startedAt) > 6 * 60_000 ? { ...c, status: 'error', error: 'The check took longer than the server allows (5 minutes) and was stopped. Pick a faster model or “Quick” in Settings → AI, then ask again.' } : c;
 
 /**
  * GET [?fresh=1]: Duke's Price to Compare + every supplier offer for Duke Energy Ohio homes (Energy Choice Ohio).
- * GET ?check=<id>: an AI deep check (running / done / error).
+ * GET ?check=<id>: one AI deep check (running / done / error). GET ?checks=1: every saved AI verdict.
  * POST {id, situation, fresh?}: only when the user taps “Ask AI”: the saved answer for this offer and situation,
  * or a new AI deep check (runs in the background, ~1–5 minutes).
  */
@@ -14,13 +20,12 @@ export async function GET(req: Request): Promise<Response> {
   if (blocked) return blocked;
   const q = new URL(req.url).searchParams;
   try {
+    // Saved AI verdicts (reading them never runs the AI).
+    if (q.get('checks')) return json({ checks: (await listChecks()).map(stale) });
     const check = q.get('check');
     if (check) {
       const c = await getCheck(check);
-      if (!c) return json({ id: check, status: 'none' });
-      // A check that never finished (the server stopped it at its time limit).
-      if (c.status === 'running' && Date.now() - Date.parse(c.startedAt) > 6 * 60_000) return json({ ...c, status: 'error', error: 'The check took too long and was stopped. Try again.' });
-      return json(c);
+      return json(c ? stale(c) : { id: check, status: 'none' });
     }
     const offers = await getOffers(q.get('fresh') === '1');
     return json({ ...offers, offers: offers.offers.map((o) => ({ ...o, id: offerId(o) })) });
@@ -44,7 +49,8 @@ export async function POST(req: Request): Promise<Response> {
   if (existing?.status === 'done' && !b.fresh) return json({ ...existing, saved: true });
   if (!process.env.ANTHROPIC_API_KEY) return json({ error: 'Add ANTHROPIC_API_KEY in Vercel (Settings → Environment Variables), then redeploy.' }, 503);
   if (!(await takeDailySlot())) return json({ error: `Today’s AI checks are used up (${process.env.AI_CHECK_DAILY_LIMIT ?? 10} a day). Try again tomorrow.` }, 429);
-  const started = await startCheck(id);
-  waitUntil(runCheck(id, offer, situation));
+  const { ai } = await getSettings();
+  const started = await startCheck(id, offer, ai);
+  waitUntil(runCheck(id, offer, situation, ai));
   return json(started, 202);
 }

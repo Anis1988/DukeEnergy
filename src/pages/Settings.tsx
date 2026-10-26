@@ -3,6 +3,7 @@ import { Chips } from '../components/ui';
 import { disconnect, getCode, getSent, saveSettings, setCode, testAlert } from '../lib/api';
 import { DEFAULT_SERVER, getServer, isNative, setServer } from '../lib/native';
 import { getTheme, setTheme, type Theme } from '../lib/prefs';
+import { AI_MODELS, aiModel, type Thoroughness } from '../lib/aiModels';
 import type { Alerts, Ev, Meter, Settings as S, Status } from '../lib/types';
 
 export function Settings({ status, meters, serial, setSerial, onChange }: { status: Status; meters: Meter[]; serial: string; setSerial: (s: string) => void; onChange: () => void }) {
@@ -66,6 +67,8 @@ export function Settings({ status, meters, serial, setSerial, onChange }: { stat
           <span className="text-sm">{saved}</span>
         </div>
       </section>
+
+      <AiSection status={status} onChange={onChange} />
 
       <CarsSection status={status} onChange={onChange} />
 
@@ -239,5 +242,45 @@ function CronSecret({ on }: { on: boolean }) {
         </ol>
       </div>
     </details>
+  );
+}
+
+/** 🤖 Which Anthropic model checks offers, and how thoroughly (faster = cheaper, reads less). */
+function AiSection({ status, onChange }: { status: Status; onChange: () => void }) {
+  const [ai, setAi] = useState(status.settings.ai);
+  const [note, setNote] = useState('');
+  const save = async (next: typeof ai) => {
+    setAi(next);
+    try {
+      await saveSettings({ ai: next });
+      setNote('✅ Saved');
+      onChange();
+    } catch (e) {
+      setNote(`⚠️ ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  return (
+    <section className="card space-y-3 border-ai/40">
+      <h2 className="font-display text-lg font-semibold text-ai">🤖 AI</h2>
+      <p className="text-sm text-muted">Used only when you tap “Ask AI” on an offer in 💲 Deals. Bigger models judge better but take longer and cost more.</p>
+      <label className="block text-sm">
+        <span className="label">Model</span>
+        <select className="input mt-1" value={ai.model} onChange={(e) => void save({ ...ai, model: e.target.value })}>
+          {AI_MODELS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+        <span className="mt-1 block text-xs text-muted">{aiModel(ai.model).note}</span>
+      </label>
+      <div className="text-sm">
+        <span className="label">Thoroughness</span>
+        <div className="mt-1">
+          <Chips<Thoroughness> value={ai.thoroughness} onChange={(t) => void save({ ...ai, thoroughness: t })} options={[['quick', '⚡ Quick'], ['normal', 'Normal'], ['deep', '🔍 Deep']]} />
+        </div>
+        <span className="mt-1 block text-xs text-muted">
+          {ai.thoroughness === 'quick' ? 'Reads the sign-up page and contract, a couple of searches: fastest and cheapest.' : ai.thoroughness === 'deep' ? 'Reads more pages and thinks longer: slowest, most careful.' : 'A good balance.'}
+          {' '}The server stops a check after 5 minutes; if that happens, pick a faster model or Quick.
+        </span>
+      </div>
+      {note && <p className="text-sm">{note}</p>}
+    </section>
   );
 }

@@ -1,15 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createHash } from 'node:crypto';
 import type { AiCheck, Offer, Situation, Verdict } from '../src/lib/types.js';
-import { db } from './store.js';
+import { db, getSettings } from './store.js';
+import { notify } from './alerts.js';
+import { aiModel, EFFORT, type Thoroughness } from '../src/lib/aiModels.js';
 
 /**
- * 🤖 Deep check of one supplier offer by Claude Fable 5.1 (Anthropic's most capable model): it opens the offer's live
- * sign-up page and contract with web fetch, searches for complaints and fine print with web search, and hands back a
- * verdict through the `submit_verdict` tool. Runs in the background (the app polls); kept 7 days per offer.
+ * 🤖 Deep check of one supplier offer by the Anthropic model picked in Settings (Claude Fable 5.1 by default): it opens
+ * the offer's live sign-up page and contract with web fetch, searches for complaints and fine print with web search,
+ * and hands back a verdict through the `submit_verdict` tool. Runs in the background; results are kept (the newest per
+ * offer, up to 30 offers) and listed in the app's "AI verdicts", whatever page is open.
  */
-const MODEL = 'claude-fable-5-1';
-const KEEP = 7 * 86400;
+const INDEX = 'de:aichecks'; // offerId -> latest check id
+const MAX_KEPT = 30;
 const DAILY_LIMIT = Number(process.env.AI_CHECK_DAILY_LIMIT ?? 10);
 
 const sha = (t: string) => createHash('sha1').update(t).digest('hex').slice(0, 16);
@@ -56,10 +59,40 @@ export async function takeDailySlot(): Promise<boolean> {
   return n <= DAILY_LIMIT;
 }
 
-export async function startCheck(id: string): Promise<AiCheck> {
-  const c: AiCheck = { id, status: 'running', startedAt: new Date().toISOString(), model: MODEL };
-  await db()?.set(key(id), c, { ex: 3600 });
+export interface AiChoice { model: string; thoroughness: Thoroughness }
+
+export async function startCheck(id: string, o: Offer, ai: AiChoice): Promise<AiCheck> {
+  const c: AiCheck = { id, offerId: offerId(o), supplier: o.supplier, rate: o.rate, term: o.term, type: o.type, status: 'running', startedAt: new Date().toISOString(), model: ai.model, thoroughness: ai.thoroughness };
+  await db()?.set(key(id), c);
+  await db()?.hset(INDEX, { [c.offerId!]: id });
   return c;
+}
+
+/** Every kept check, newest first (the app's "AI verdicts"); only the newest 30 offers are kept. */
+export async function listChecks(): Promise<AiCheck[]> {
+  const r = db();
+  if (!r) return [];
+  const idx = ((await r.hgetall<Record<string, string>>(INDEX)) ?? {}) as Record<string, string>;
+  const out: AiCheck[] = [];
+  for (const [oid, id] of Object.entries(idx)) {
+    const c = await getCheck(id);
+    if (c) out.push(c);
+    else await r.hdel(INDEX, oid);
+  }
+  out.sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
+  for (const old of out.slice(MAX_KEPT)) {
+    await r.hdel(INDEX, old.offerId ?? '');
+    await r.del(key(old.id));
+  }
+  return out.slice(0, MAX_KEPT);
+}
+
+/** Saves the end of a check (keeps who/what it was about from the start). */
+async function finish(id: string, patch: Partial<AiCheck>): Promise<AiCheck> {
+  const start = (await getCheck(id)) ?? ({ id, startedAt: new Date().toISOString() } as AiCheck);
+  const done: AiCheck = { ...start, ...patch, finishedAt: new Date().toISOString() };
+  await db()?.set(key(id), done);
+  return done;
 }
 
 const verdictTool: Anthropic.Beta.BetaTool = {
@@ -162,26 +195,35 @@ Check this offer for them and give your verdict.`;
 }
 
 /** The check itself: a manual loop (server tools may pause; the verdict arrives as a tool call). */
-export async function runCheck(id: string, o: Offer, situation: Situation): Promise<void> {
+export async function runCheck(id: string, o: Offer, situation: Situation, ai: AiChoice): Promise<void> {
   const client = new Anthropic(); // ANTHROPIC_API_KEY from Vercel's environment
+  const m = aiModel(ai.model);
+  const quick = ai.thoroughness === 'quick';
+  const tools: Anthropic.Beta.BetaToolUnion[] =
+    m.tools === 'new'
+      ? [
+          { type: 'web_search_20260318', name: 'web_search', max_uses: quick ? 3 : 5 },
+          { type: 'web_fetch_20260318', name: 'web_fetch', max_uses: quick ? 4 : 8, max_content_tokens: 30000 },
+          verdictTool,
+        ]
+      : [
+          { type: 'web_search_20250305', name: 'web_search', max_uses: quick ? 3 : 5 },
+          { type: 'web_fetch_20250910', name: 'web_fetch', max_uses: quick ? 4 : 8, max_content_tokens: 30000 },
+          verdictTool,
+        ];
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: brief(o, situation) }];
   let verdict: Verdict | null = null;
-  let servedBy = MODEL;
+  let servedBy = m.id;
   try {
     for (let turn = 0; turn < 8 && !verdict; turn++) {
       const res = await client.beta.messages
         .stream({
-          model: MODEL,
+          model: m.id,
           max_tokens: 32000,
-          betas: ['server-side-fallback-2026-07-01'],
-          fallbacks: 'default', // a declined request is re-run on a fallback model in the same call
-          output_config: { effort: 'high' },
-          system: SYSTEM,
-          tools: [
-            { type: 'web_search_20260318', name: 'web_search', max_uses: 8 },
-            { type: 'web_fetch_20260318', name: 'web_fetch', max_uses: 12, max_content_tokens: 40000 },
-            verdictTool,
-          ],
+          ...(m.fallbacks ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}), // a declined request is re-run on a fallback model in the same call
+          ...(m.effort ? { output_config: { effort: EFFORT[ai.thoroughness] } } : {}),
+          system: SYSTEM + (quick ? '\n\nBe quick: read the sign-up page and the contract, do at most two searches, then give your verdict.' : ''),
+          tools,
           messages,
         })
         .finalMessage();
@@ -197,13 +239,25 @@ export async function runCheck(id: string, o: Offer, situation: Situation): Prom
       if (res.stop_reason !== 'pause_turn') messages.push({ role: 'user', content: 'Please finish now and call submit_verdict with what you found.' });
     }
     if (!verdict) throw new Error('The AI did not finish its check. Try again.');
-    await db()?.set(key(id), { id, status: 'done', startedAt: (await getCheck(id))?.startedAt ?? new Date().toISOString(), finishedAt: new Date().toISOString(), model: servedBy, verdict } satisfies AiCheck, { ex: KEEP });
+    await finish(id, { status: 'done', model: servedBy, verdict });
+    await tell(`🤖 AI verdict: ${LABEL[verdict.verdict]}`, `${o.supplier} (${(o.rate * 100).toFixed(2)}¢): ${verdict.headline}`);
   } catch (e) {
     const msg =
       e instanceof Anthropic.AuthenticationError ? 'ANTHROPIC_API_KEY is missing or wrong (Vercel → Settings → Environment Variables).'
+      : e instanceof Anthropic.NotFoundError ? `The model ${m.name} isn’t available to your API key. Pick another one in Settings → AI.`
       : e instanceof Anthropic.RateLimitError ? 'The AI is busy right now. Try again in a minute.'
       : e instanceof Anthropic.APIError ? `The AI service answered ${e.status}: ${e.message}`
       : e instanceof Error ? e.message : String(e);
-    await db()?.set(key(id), { id, status: 'error', startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), model: servedBy, error: msg } satisfies AiCheck, { ex: 600 });
+    await finish(id, { status: 'error', model: servedBy, error: msg });
   }
+}
+
+const LABEL = { good: '✅ Looks good', caution: '⚠️ Be careful', avoid: '⛔ Avoid' } as const;
+
+/** A phone notification through ntfy when alerts are set up (Settings → Alerts); never fails the check. */
+async function tell(title: string, text: string): Promise<void> {
+  try {
+    const s = await getSettings();
+    if (s.alerts.on && s.alerts.topic) await notify(s.alerts.topic, title, text, 'robot');
+  } catch { /* the verdict is saved either way */ }
 }

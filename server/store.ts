@@ -1,6 +1,7 @@
 import { Redis } from '@upstash/redis';
 import { DEFAULT_SETTINGS, type Alerts, type Ev, type Plan, type Settings, type Supply } from '../src/lib/types.js';
 import { LocalStore } from './localStore.js';
+import { AI_MODELS } from '../src/lib/aiModels.js';
 
 /**
  * Upstash Redis (Vercel → Storage → Upstash for Redis, free): the Duke login (tokens), your settings and a cache of
@@ -19,7 +20,7 @@ export const storeReady = () => !!db();
 
 export async function getSettings(): Promise<Settings> {
   const saved = (await db()?.get<Partial<Settings>>('de:settings')) ?? {};
-  return { ...DEFAULT_SETTINGS, ...saved, alerts: { ...DEFAULT_SETTINGS.alerts, ...saved.alerts }, plan: { ...DEFAULT_SETTINGS.plan, ...saved.plan }, ev: { ...DEFAULT_SETTINGS.ev, ...saved.ev }, supply: { ...DEFAULT_SETTINGS.supply, ...saved.supply } };
+  return { ...DEFAULT_SETTINGS, ...saved, alerts: { ...DEFAULT_SETTINGS.alerts, ...saved.alerts }, plan: { ...DEFAULT_SETTINGS.plan, ...saved.plan }, ev: { ...DEFAULT_SETTINGS.ev, ...saved.ev }, supply: { ...DEFAULT_SETTINGS.supply, ...saved.supply }, ai: { ...DEFAULT_SETTINGS.ai, ...saved.ai } };
 }
 
 const num = (v: unknown, max: number) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max ? v : undefined);
@@ -67,6 +68,10 @@ export async function saveSettings(s: Partial<Settings>): Promise<Settings> {
       monthlyFee: num(u.monthlyFee, 100) ?? now.supply.monthlyFee,
       cancelFee: num(u.cancelFee, 2000) ?? now.supply.cancelFee,
       endDate: typeof u.endDate === 'string' && /^(\d{4}-\d{2}-\d{2})?$/.test(u.endDate) ? u.endDate : now.supply.endDate,
+    },
+    ai: {
+      model: typeof s.ai?.model === 'string' && AI_MODELS.some((m) => m.id === s.ai!.model) ? s.ai.model : now.ai.model,
+      thoroughness: s.ai?.thoroughness && ['quick', 'normal', 'deep'].includes(s.ai.thoroughness) ? s.ai.thoroughness : now.ai.thoroughness,
     },
   };
   await db()?.set('de:settings', next);
