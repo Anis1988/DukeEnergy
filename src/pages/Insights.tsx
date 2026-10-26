@@ -4,6 +4,7 @@ import { ErrorBox, Spinner, Stat, useData } from '../components/ui';
 import { getUsage, saveSettings } from '../lib/api';
 import { addDays, addMonths, hourLong, kwh, long, monthStart, money, short } from '../lib/dates';
 import { band, comparePlan, findCharging, weatherFit } from '../lib/insights';
+import { TARIFF_SOURCE, tdcppPlan } from '../lib/tariffs';
 import { PLAN_PRESETS, type Plan, type Settings, type Usage } from '../lib/types';
 
 type Hourly = ReturnType<typeof useData<Usage>>;
@@ -179,6 +180,7 @@ const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
 function PlanCheck({ q, settings, onSaved }: { q: Hourly; settings: Settings; onSaved: () => void }) {
   const [plan, setPlan] = useState<Plan>(settings.plan);
+  const tdcpp = tdcppPlan(settings.price, settings.fixed);
   const [shift, setShift] = useState(0);
   const [note, setNote] = useState('');
   const r = q.data ? comparePlan(q.data.points, plan, settings.price, settings.fixed) : null;
@@ -209,10 +211,11 @@ function PlanCheck({ q, settings, onSaved }: { q: Hourly; settings: Settings; on
     <section className="card space-y-3">
       <div>
         <h2 className="font-display text-lg font-semibold">⏰ Would a time-of-use plan save money?</h2>
-        <p className="text-sm text-muted">Your real hour-by-hour use from the last 8 weeks, priced on a plan where some hours cost more and others less. Enter the plan’s real hours and prices (from Duke or a supplier’s offer); the ones shown are examples.</p>
+        <p className="text-sm text-muted">Your real hour-by-hour use from the last 8 weeks, priced on a plan where some hours cost more and others less. ⭐ is Duke’s real optional rate; the others are examples to fill in with a real offer’s hours and prices.</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <button className="chip" aria-pressed={plan.name === tdcpp.name} onClick={() => { setPlan(tdcpp); setNote(''); }}>⭐ Duke Rate TD-CPP (official)</button>
         {Object.entries(PLAN_PRESETS).map(([k, p]) => (
           <button key={k} className="chip" aria-pressed={plan.name === p.name} onClick={() => { setPlan(p); setNote(''); }}>{p.name}</button>
         ))}
@@ -232,6 +235,16 @@ function PlanCheck({ q, settings, onSaved }: { q: Hourly; settings: Settings; on
         <input type="checkbox" className="h-4 w-4 accent-[rgb(var(--accent))]" checked={plan.weekdaysOnly} onChange={(e) => set('weekdaysOnly', e.target.checked)} />
         Peak price on weekdays only
       </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" className="h-4 w-4 accent-[rgb(var(--accent))]" checked={plan.summerOnly} onChange={(e) => set('summerOnly', e.target.checked)} />
+        Peak price only in summer (May–September)
+      </label>
+      {plan.name === tdcpp.name && (
+        <p className="rounded-xl bg-bg p-3 text-xs">
+          Duke’s real optional rate, from its official tariff: cheapest midnight–5 AM every day, higher 2–8 PM on summer weekdays, about the same at other times. Prices shown are your price ({money(settings.price)}/kWh) moved by Duke’s difference in each period. On up to 10 announced “critical peak” days a year, a few hours cost more (not counted here). Ask Duke to switch; if you quit in the first year Duke can rebill you on the standard rate.{' '}
+          <a className="underline" href={TARIFF_SOURCE} target="_blank" rel="noreferrer">Tariff (sheet 32)</a>
+        </p>
+      )}
       <p className="text-xs text-muted">Same “from” and “until” = no such hours. Overnight wins where the two overlap.</p>
       <div className="flex items-center gap-3">
         <button className="btn" onClick={() => void save()}>Save this plan</button>

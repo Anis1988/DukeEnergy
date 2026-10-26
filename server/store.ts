@@ -47,6 +47,7 @@ export async function saveSettings(s: Partial<Settings>): Promise<Settings> {
       peakStart: hour(p.peakStart) ?? now.plan.peakStart,
       peakEnd: hour(p.peakEnd) ?? now.plan.peakEnd,
       weekdaysOnly: typeof p.weekdaysOnly === 'boolean' ? p.weekdaysOnly : now.plan.weekdaysOnly,
+      summerOnly: typeof p.summerOnly === 'boolean' ? p.summerOnly : now.plan.summerOnly,
       peak: num(p.peak, 5) ?? now.plan.peak,
       offPeak: num(p.offPeak, 5) ?? now.plan.offPeak,
       nightStart: hour(p.nightStart) ?? now.plan.nightStart,

@@ -9,7 +9,8 @@ export type Band = 'peak' | 'night' | 'off';
 /** Which price an hour gets: overnight first (it may cover weekends too), then peak, else off-peak. */
 export function band(plan: Plan, day: string, h: number): Band {
   if (inWindow(h, plan.nightStart, plan.nightEnd)) return 'night';
-  if (inWindow(h, plan.peakStart, plan.peakEnd) && !(plan.weekdaysOnly && weekend(day))) return 'peak';
+  const summer = Number(day.slice(5, 7)) >= 5 && Number(day.slice(5, 7)) <= 9;
+  if (inWindow(h, plan.peakStart, plan.peakEnd) && !(plan.weekdaysOnly && weekend(day)) && !(plan.summerOnly && !summer)) return 'peak';
   return 'off';
 }
 

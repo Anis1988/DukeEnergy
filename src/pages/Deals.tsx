@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Chips, ErrorBox, Spinner, useData } from '../components/ui';
 import { getOffers, getUsage, saveSettings } from '../lib/api';
 import { addDays, addMonths, money, monthStart } from '../lib/dates';
-import type { Offer, Settings } from '../lib/types';
+import { band, findCharging } from '../lib/insights';
+import { RS_DISTRIBUTION, TARIFF_SOURCE, TDCPP, tdcppPlan } from '../lib/tariffs';
+import type { Offer, Point, Settings } from '../lib/types';
 
 type Term = 'any' | '12' | '24';
 interface Filters { fixed: boolean; noCancelFee: boolean; noMonthlyFee: boolean; green: boolean; term: Term }
@@ -79,6 +81,8 @@ export function Deals({ serial, today, settings, onSaved }: { serial: string; to
         )}
         <p className="text-xs text-muted">“Safe” = fixed price, no teaser rate, 6+ months, small or no cancel fee. Priced on your last 12 months ({Math.round(yearKwh).toLocaleString()} kWh{settings.ev.cars ? ', cars included' : ''}).</p>
       </section>
+
+      {settings.ev.cars > 0 && <CarsCard serial={serial} end={end} settings={settings} yearPts={pts} best={best} nowRate={nowRate} />}
 
       {/* What you pay now. */}
       <section className="card space-y-2 text-sm">
@@ -201,5 +205,102 @@ function SupplyForm({ settings, onSaved }: { settings: Settings; onSaved: () => 
       </div>
       {err && <p className="text-sm text-bad">{err}</p>}
     </div>
+  );
+}
+
+/**
+ * ⚡ For homes with electric cars: what the cars cost, what a cheaper supplier saves on them, and Duke's official
+ * time-of-day rate (Rate TD-CPP) with the cars charging midnight–5 AM. A year is estimated from 8 weeks of hourly use
+ * (when you use power, cars found in it) and the last 12 months of daily use (how much, and how much in summer).
+ */
+function CarsCard({ serial, end, settings, yearPts, best, nowRate }: { serial: string; end: string; settings: Settings; yearPts: Point[]; best?: Offer; nowRate: number }) {
+  const start = addDays(end, -55);
+  // Same request as 💡 Insights (answered from memory when already loaded).
+  const q = useData(`hh:${serial}:${start}:${end}`, () => getUsage(serial, 'HOURLY', start, end));
+  if (q.error) return <ErrorBox error={q.error} onRetry={q.reload} />;
+  if (q.loading && !q.data) return <section className="card"><Spinner label="Looking at when your cars charge…" /></section>;
+  const hours = q.data?.points ?? [];
+  const days = new Set(hours.map((p) => p.t.slice(0, 10))).size;
+  if (days < 14) return null;
+  const ev = settings.ev;
+  const found = findCharging(hours, ev.chargerKw);
+  const yearKwh = yearPts.length ? (yearPts.reduce((s, p) => s + p.kwh, 0) / yearPts.length) * 365 : 0;
+  const carYear = (found.total / days) * 365;
+  const houseYear = Math.max(0, yearKwh - carYear);
+  if (carYear < 100) {
+    return (
+      <section className="card text-sm">
+        <p className="label">⚡ Your cars</p>
+        <p className="mt-1">No regular home charging found in the last 8 weeks, so the cars don’t change the deals above. (Charging from a normal outlet is too small to spot.)</p>
+      </section>
+    );
+  }
+
+  // When the house (without the cars) uses power, in Rate TD-CPP's periods; summer share from the daily use.
+  const td = tdcppPlan(settings.price, settings.fixed);
+  const allYear = { ...td, summerOnly: false };
+  let houseAll = 0, housePeak = 0, houseNight = 0;
+  for (const p of hours) {
+    const k = Math.max(0, p.kwh - (found.byHour.get(p.t) ?? 0));
+    const b = band(allYear, p.t.slice(0, 10), Number(p.t.slice(11, 13)));
+    houseAll += k;
+    if (b === 'peak') housePeak += k;
+    if (b === 'night') houseNight += k;
+  }
+  const summerShare = yearPts.length ? yearPts.filter((p) => { const m = Number(p.t.slice(5, 7)); return m >= 5 && m <= 9; }).reduce((s, p) => s + p.kwh, 0) / yearPts.reduce((s, p) => s + p.kwh, 0) : 5 / 12;
+  const peakShare = houseAll ? (housePeak / houseAll) * summerShare : 0;
+  const nightShare = houseAll ? houseNight / houseAll : 0;
+  const houseEffect = houseYear * (peakShare * (TDCPP.onPeak - RS_DISTRIBUTION) + nightShare * (TDCPP.discount - RS_DISTRIBUTION) + (1 - peakShare - nightShare) * (TDCPP.offPeak - RS_DISTRIBUTION));
+  // Cars as they charge now (summer peak counted the same way) vs all midnight–5 AM.
+  let carNowPerKwh = 0;
+  for (const [t, k] of found.byHour) {
+    const b = band(allYear, t.slice(0, 10), Number(t.slice(11, 13)));
+    carNowPerKwh += k * (b === 'peak' ? summerShare * (TDCPP.onPeak - RS_DISTRIBUTION) + (1 - summerShare) * (TDCPP.offPeak - RS_DISTRIBUTION) : b === 'night' ? TDCPP.discount - RS_DISTRIBUTION : TDCPP.offPeak - RS_DISTRIBUTION);
+  }
+  const carsNowEffect = found.total ? (carNowPerKwh / found.total) * carYear : 0;
+  const carsNightEffect = carYear * (TDCPP.discount - RS_DISTRIBUTION);
+  const tdcppTotal = -(houseEffect + carsNightEffect); // + = saves
+  const supplierOnCars = best ? carYear * (nowRate - best.rate) : 0;
+  const nightKwh = 5 * ev.chargerKw * ev.cars;
+
+  return (
+    <section className="card space-y-3">
+      <div>
+        <p className="label">⚡ Your {ev.cars === 1 ? 'car' : `${ev.cars} cars`}</p>
+        <p className="mt-1 text-sm">
+          About <b>{Math.round(carYear).toLocaleString()} kWh a year</b> ({Math.round((carYear / Math.max(1, yearKwh)) * 100)}% of your home), about <b>{money(carYear * settings.price)}</b> a year at your price.
+        </p>
+      </div>
+
+      <div className="rounded-xl bg-bg p-3 text-sm">
+        <p className="font-semibold">1 · A cheaper supplier</p>
+        <p className="mt-1">
+          Supplier prices are the same at every hour, so your cars get cheaper too.
+          {best && supplierOnCars > 1 ? <> With the deal above, charging alone costs <b className="text-good">{money(supplierOnCars)} a year less</b> (already in its savings).</> : ' No safe offer beats your price right now.'}
+        </p>
+      </div>
+
+      <div className="rounded-xl bg-bg p-3 text-sm">
+        <p className="font-semibold">2 · Duke’s night rate (Rate TD-CPP) + charging after midnight</p>
+        <p className="mt-1">
+          Duke’s official optional rate makes midnight–5 AM about {((RS_DISTRIBUTION - TDCPP.discount) * 100).toFixed(1)}¢/kWh cheaper every day, and 2–8 PM on summer weekdays about {((TDCPP.onPeak - RS_DISTRIBUTION) * 100).toFixed(1)}¢ dearer.
+        </p>
+        <ul className="mt-2 space-y-1">
+          <li>🚗 Cars charging midnight–5 AM: <b className="text-good">{money(-carsNightEffect)} a year less</b>{carsNowEffect < 0 ? <span className="text-muted"> (charging the way you do now: {money(-carsNowEffect)})</span> : <span className="text-muted"> (the way you charge now it would cost {money(carsNowEffect)} more)</span>}</li>
+          <li>🏠 The rest of your home on it: <b className={houseEffect <= 0 ? 'text-good' : 'text-bad'}>{houseEffect <= 0 ? `${money(-houseEffect)} a year less` : `${money(houseEffect)} a year more`}</b> <span className="text-muted">(summer afternoons cost more)</span></li>
+          <li>Together: <b className={tdcppTotal >= 0 ? 'text-good' : 'text-bad'}>{tdcppTotal >= 0 ? `▼ ${money(tdcppTotal)} a year` : `▲ ${money(-tdcppTotal)} a year`}</b></li>
+        </ul>
+        <p className="mt-2 text-xs text-muted">
+          Midnight–5 AM is 5 hours: {ev.cars} × {ev.chargerKw} kW ≈ {Math.round(nightKwh)} kWh a night, about {Math.round(nightKwh * ev.milesPerKwh).toLocaleString()} miles — usually plenty. Set the start time in each car’s or charger’s app. Up to 10 “critical peak” days a year cost more for a few hours (not counted). If you quit in the first year, Duke can rebill you on the standard rate.{' '}
+          <a className="underline" href={TARIFF_SOURCE} target="_blank" rel="noreferrer">Official tariff</a>
+        </p>
+      </div>
+
+      <p className="text-sm">
+        💡 <b>Best for you:</b>{' '}
+        {tdcppTotal > 5 ? 'both: a cheaper fixed supplier for the electricity, and Duke’s Rate TD-CPP with the cars charging after midnight. Ask Duke to confirm Rate TD-CPP works with a supplier before switching.' : 'the cheaper supplier. Duke’s night rate would barely change your bill because of summer afternoons.'}
+      </p>
+      <p className="text-xs text-muted">No supplier on Ohio’s list sells a “free nights” or EV plan for Duke homes right now; all their prices are the same at every hour.</p>
+    </section>
   );
 }
