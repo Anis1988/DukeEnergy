@@ -1,5 +1,5 @@
 import { apiUrl, getServer, isNative } from './native';
-import type { Meter, Settings, Status, Usage } from './types';
+import type { Meter, Settings, Status, Usage, Offers } from './types';
 
 const CODE_KEY = 'ww.accessCode';
 export const getCode = () => { try { return localStorage.getItem(CODE_KEY) ?? ''; } catch { return ''; } };
@@ -32,6 +32,7 @@ export const disconnect = () => call<{ connected: boolean }>('/api/connect', { m
 export const saveSettings = (settings: Partial<Settings>) => call<{ settings: Settings }>('/api/connect', { method: 'PUT', body: JSON.stringify({ settings }) });
 export const getSent = () => call<{ sent: { at: string; title: string; text: string }[] }>('/api/alerts');
 export const testAlert = () => call<{ ok: boolean }>('/api/alerts', { method: 'POST', body: JSON.stringify({ test: true }) });
+export const getOffers = (fresh = false) => call<Offers>(`/api/offers${fresh ? '?fresh=1' : ''}`);
 export const getMeters = (fresh = false) => call<{ meters: Meter[]; today: string }>(`/api/usage?meters=1${fresh ? '&fresh=1' : ''}`);
 export const getUsage = (serial: string, interval: 'HOURLY' | 'DAILY', start: string, end: string) =>
   call<Usage>(`/api/usage?${new URLSearchParams({ serial, interval, start, end })}`);
