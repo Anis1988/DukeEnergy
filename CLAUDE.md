@@ -7,4 +7,6 @@
 - Usage is cached per chunk (`de:u:...`): days older than 3 days 60 days, recent ones 30 minutes. Daily requests go month by month, hourly week by week.
 - Server imports end in `.js` (Vercel runs `api/` as Node ESM without bundling). `npm run dev` serves `api/*.ts` too (`vite.config.ts`).
 - Every API call needs `APP_ACCESS_TOKEN` (header `X-Access-Token`): the Duke login is stored on the server.
+- 🔔 Alerts: Vercel cron (`vercel.json`, 13:00 UTC daily) → `GET /api/alerts` (`server/alerts.ts`): day ≥ `alerts.pct` above the 14-day average, month heading over the goal, or Duke login lost → ntfy.sh topic. Each day/month judged once (`de:al:*`, set NX). Cron calls are recognised by `CRON_SECRET` (if set) or the vercel-cron user agent. Last 20 sent in `de:sent`.
+- 💡 Insights (`src/pages/Insights.tsx`, maths in `src/lib/insights.ts`, on the device): weather = degree-day fit (base + heat × below B + cool × above B, B 50–72 °F best fit) on 13 months of daily data (same request as Months); plan check = last 56 days hourly priced on `settings.plan` (presets are examples, not real tariffs).
 - Do not add automated tests unless asked.

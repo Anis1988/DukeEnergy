@@ -8,20 +8,22 @@ import type { Status } from './lib/types';
 import { Connect } from './pages/Connect';
 import { Guide } from './pages/Guide';
 import { Hourly } from './pages/Hourly';
+import { Insights } from './pages/Insights';
 import { Months } from './pages/Months';
 import { Overview } from './pages/Overview';
 import { Settings } from './pages/Settings';
 
-type Page = 'overview' | 'hours' | 'months' | 'settings' | 'guide';
+type Page = 'overview' | 'hours' | 'months' | 'insights' | 'settings' | 'guide';
 const TABS: [Page, string, string][] = [
   ['overview', '📊', 'Overview'],
   ['hours', '⏱️', 'Hours'],
   ['months', '📆', 'Months'],
+  ['insights', '💡', 'Insights'],
   ['settings', '⚙️', 'Settings'],
 ];
 const pageFromPath = (): Page => {
   const p = window.location.pathname.replace(/^\//, '') as Page;
-  return ['overview', 'hours', 'months', 'settings', 'guide'].includes(p) ? p : 'overview';
+  return ['overview', 'hours', 'months', 'insights', 'settings', 'guide'].includes(p) ? p : 'overview';
 };
 
 export default function App() {
@@ -83,6 +85,7 @@ export default function App() {
   else if (m.error) body = <ErrorBox error={m.error} onRetry={m.reload} />;
   else if (!meter) body = <Spinner label="Finding your meter…" />;
   else if (page === 'hours') body = <Hourly serial={meter.serial} today={today} settings={status.settings} day={day || addDays(today, -1)} setDay={setDay} />;
+  else if (page === 'insights') body = <Insights serial={meter.serial} today={today} settings={status.settings} onSaved={loadStatus} />;
   else if (page === 'months') body = <Months serial={meter.serial} today={today} settings={status.settings} />;
   else body = <Overview serial={meter.serial} today={today} settings={status.settings} onDay={(d) => { setDay(d); setPage('hours'); }} />;
 
@@ -101,7 +104,7 @@ export default function App() {
 
       {/* Tabs: at the top on big screens, at the bottom (thumb reach) on phones. */}
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:static sm:mb-4 sm:rounded-2xl sm:border">
-        <div className="mx-auto grid max-w-3xl grid-cols-4">
+        <div className="mx-auto grid max-w-3xl grid-cols-5">
           {TABS.map(([p, icon, label]) => (
             <button key={p} onClick={() => setPage(p)} aria-current={page === p ? 'page' : undefined} className={`flex flex-col items-center gap-0.5 py-2 text-xs font-medium sm:flex-row sm:justify-center sm:gap-2 sm:py-3 sm:text-sm ${page === p ? 'text-accent' : 'text-muted'}`}>
               <span className="text-lg sm:text-base">{icon}</span>{label}

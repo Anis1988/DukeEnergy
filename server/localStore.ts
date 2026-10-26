@@ -26,7 +26,7 @@ export class LocalStore {
     return (this.live(key)?.v as Record<string, unknown> | undefined) ?? {};
   }
   async get<T>(key: string): Promise<T | null> { return (this.live(key)?.v as T) ?? null; }
-  async set(key: string, v: unknown, opts?: { ex?: number }) { this.data[key] = { v, exp: opts?.ex ? Date.now() + opts.ex * 1000 : undefined }; this.save(); return 'OK'; }
+  async set(key: string, v: unknown, opts?: { ex?: number; nx?: boolean }) { if (opts?.nx && this.live(key)) return null; this.data[key] = { v, exp: opts?.ex ? Date.now() + opts.ex * 1000 : undefined }; this.save(); return 'OK'; }
   async del(key: string) { delete this.data[key]; this.save(); return 1; }
   async incr(key: string) { const n = Number(this.live(key)?.v ?? 0) + 1; this.data[key] = { ...this.data[key], v: n }; this.save(); return n; }
   async decr(key: string) { const n = Number(this.live(key)?.v ?? 0) - 1; this.data[key] = { ...this.data[key], v: n }; this.save(); return n; }

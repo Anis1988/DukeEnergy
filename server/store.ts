@@ -1,5 +1,5 @@
 import { Redis } from '@upstash/redis';
-import { DEFAULT_SETTINGS, type Settings } from '../src/lib/types.js';
+import { DEFAULT_SETTINGS, type Alerts, type Plan, type Settings } from '../src/lib/types.js';
 import { LocalStore } from './localStore.js';
 
 /**
@@ -18,15 +18,40 @@ export function db(): Redis | null {
 export const storeReady = () => !!db();
 
 export async function getSettings(): Promise<Settings> {
-  return { ...DEFAULT_SETTINGS, ...((await db()?.get<Partial<Settings>>('de:settings')) ?? {}) };
+  const saved = (await db()?.get<Partial<Settings>>('de:settings')) ?? {};
+  return { ...DEFAULT_SETTINGS, ...saved, alerts: { ...DEFAULT_SETTINGS.alerts, ...saved.alerts }, plan: { ...DEFAULT_SETTINGS.plan, ...saved.plan } };
 }
+
+const num = (v: unknown, max: number) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max ? v : undefined);
+const hour = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 23 ? (v as number) : undefined);
+
 export async function saveSettings(s: Partial<Settings>): Promise<Settings> {
-  const num = (v: unknown, max: number) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max ? v : undefined);
   const now = await getSettings();
+  const a: Partial<Alerts> = s.alerts ?? {};
+  const p: Partial<Plan> = s.plan ?? {};
   const next: Settings = {
     price: num(s.price, 5) ?? now.price,
     fixed: num(s.fixed, 500) ?? now.fixed,
     goal: num(s.goal, 100000) ?? now.goal,
+    alerts: {
+      on: typeof a.on === 'boolean' ? a.on : now.alerts.on,
+      pct: num(a.pct, 1000) ?? now.alerts.pct,
+      // ntfy topic names: letters, digits, - and _ (a long random one is made by the app).
+      topic: typeof a.topic === 'string' && /^[A-Za-z0-9_-]{0,64}$/.test(a.topic) ? a.topic : now.alerts.topic,
+      goal: typeof a.goal === 'boolean' ? a.goal : now.alerts.goal,
+    },
+    plan: {
+      name: typeof p.name === 'string' ? p.name.slice(0, 60) : now.plan.name,
+      peakStart: hour(p.peakStart) ?? now.plan.peakStart,
+      peakEnd: hour(p.peakEnd) ?? now.plan.peakEnd,
+      weekdaysOnly: typeof p.weekdaysOnly === 'boolean' ? p.weekdaysOnly : now.plan.weekdaysOnly,
+      peak: num(p.peak, 5) ?? now.plan.peak,
+      offPeak: num(p.offPeak, 5) ?? now.plan.offPeak,
+      nightStart: hour(p.nightStart) ?? now.plan.nightStart,
+      nightEnd: hour(p.nightEnd) ?? now.plan.nightEnd,
+      night: num(p.night, 5) ?? now.plan.night,
+      fixed: num(p.fixed, 500) ?? now.plan.fixed,
+    },
   };
   await db()?.set('de:settings', next);
   return next;

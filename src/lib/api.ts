@@ -30,6 +30,8 @@ export const getStatus = () => call<Status>('/api/connect');
 export const finishLogin = (url: string, verifier: string) => call<{ connected: boolean; email?: string }>('/api/connect', { method: 'POST', body: JSON.stringify({ url, verifier }) });
 export const disconnect = () => call<{ connected: boolean }>('/api/connect', { method: 'DELETE' });
 export const saveSettings = (settings: Partial<Settings>) => call<{ settings: Settings }>('/api/connect', { method: 'PUT', body: JSON.stringify({ settings }) });
+export const getSent = () => call<{ sent: { at: string; title: string; text: string }[] }>('/api/alerts');
+export const testAlert = () => call<{ ok: boolean }>('/api/alerts', { method: 'POST', body: JSON.stringify({ test: true }) });
 export const getMeters = (fresh = false) => call<{ meters: Meter[]; today: string }>(`/api/usage?meters=1${fresh ? '&fresh=1' : ''}`);
 export const getUsage = (serial: string, interval: 'HOURLY' | 'DAILY', start: string, end: string) =>
   call<Usage>(`/api/usage?${new URLSearchParams({ serial, interval, start, end })}`);
