@@ -40,6 +40,10 @@ export function Guide() {
         <p><b>⏰ Time-of-use plan:</b> some plans charge more in the afternoon peak and less at night. Pick an example or type in a real offer’s hours and prices; the app prices your real hour-by-hour use from the last 8 weeks on it and compares with what you pay now. The slider shows what moving some use (laundry, dishwasher, car charging) out of the peak would change.</p>
       </section>
       <section className="card space-y-2">
+        <h3 className="font-semibold">🚗 Electric cars</h3>
+        <p>Set how many cars you charge at home and your charger’s power in ⚙️ Settings. The app spots charging in your hourly use (several hours far above your home’s normal level) and shows in 💡 Insights how much the cars use and cost, about how many miles that is, and what charging in a plan’s cheap hours would save. ⏱️ Hours marks the charging hours, and “high use” alerts leave car charging out, so a charging night doesn’t set them off.</p>
+      </section>
+      <section className="card space-y-2">
         <h3 className="font-semibold">🔔 Alerts</h3>
         <p>In ⚙️ Settings → Alerts: install the free ntfy app, subscribe to your topic, switch alerts on. Each morning you get a notification if yesterday was much higher than usual (you choose how much), if the month is heading over your goal, or if the Duke connection needs you.</p>
       </section>

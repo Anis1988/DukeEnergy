@@ -2,6 +2,7 @@ import { BarChart } from '../components/Chart';
 import { ErrorBox, Spinner, Stat, useData } from '../components/ui';
 import { getUsage } from '../lib/api';
 import { addDays, hour12, hourLong, kwh, long, money } from '../lib/dates';
+import { findCharging } from '../lib/insights';
 import type { Settings } from '../lib/types';
 
 export function Hourly({ serial, today, settings, day, setDay }: { serial: string; today: string; settings: Settings; day: string; setDay: (d: string) => void }) {
@@ -17,14 +18,20 @@ export function Hourly({ serial, today, settings, day, setDay }: { serial: strin
   const night = [0, 1, 2, 3, 4, 5].map((h) => byHour.get(h)?.kwh).filter((v): v is number => v != null);
   const base = night.length ? Math.min(...night) * 1000 : null;
 
+  // 🚗 Car charging that day (when cars are set up in Settings).
+  const car = settings.ev.cars > 0 ? findCharging(q.data?.points ?? [], settings.ev.chargerKw) : null;
+  const carKwh = car?.total ?? 0;
+  const carHours = car ? [...car.byHour.keys()].map((t) => Number(t.slice(11, 13))).sort((a, b) => a - b) : [];
+
   const bars = Array.from({ length: 24 }, (_, h) => {
     const p = byHour.get(h);
+    const c = car?.byHour.get(`${day}T${String(h).padStart(2, '0')}`);
     return {
       key: String(h),
       value: p?.kwh ?? null,
       label: hour12(h),
       strong: !!peak && peak[0] === h,
-      tip: p ? <span><b>{p.kwh.toFixed(2)} kWh</b> · {money(p.kwh * settings.price)}<br />{hourLong(h)}–{hourLong((h + 1) % 24)}{p.temp != null && ` · ${p.temp.toFixed(0)}°F`}</span> : <span>{hourLong(h)}: no reading</span>,
+      tip: p ? <span><b>{p.kwh.toFixed(2)} kWh</b> · {money(p.kwh * settings.price)}<br />{hourLong(h)}–{hourLong((h + 1) % 24)}{p.temp != null && ` · ${p.temp.toFixed(0)}°F`}{c ? <><br />🚗 about {c.toFixed(1)} kWh car charging</> : null}</span> : <span>{hourLong(h)}: no reading</span>,
     };
   });
 
@@ -48,6 +55,11 @@ export function Hourly({ serial, today, settings, day, setDay }: { serial: strin
           <section className="card">
             <h2 className="mb-2 font-display text-lg font-semibold">Hour by hour</h2>
             {byHour.size ? <BarChart bars={bars} height={220} /> : <p className="py-8 text-center text-sm text-muted">No readings for this day yet. Try the day before.</p>}
+            {carKwh > 0 && (
+              <p className="mt-2 text-sm">
+                🚗 Car charging around {carHours.map((h) => hour12(h)).join(', ')}: about <b>{kwh(carKwh)}</b> ({money(carKwh * settings.price)}). The house alone used {kwh(Math.max(0, total - carKwh))}.
+              </p>
+            )}
           </section>
         </>
       )}

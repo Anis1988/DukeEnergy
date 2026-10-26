@@ -9,4 +9,6 @@
 - Every API call needs `APP_ACCESS_TOKEN` (header `X-Access-Token`): the Duke login is stored on the server.
 - 🔔 Alerts: Vercel cron (`vercel.json`, 13:00 UTC daily) → `GET /api/alerts` (`server/alerts.ts`): day ≥ `alerts.pct` above the 14-day average, month heading over the goal, or Duke login lost → ntfy.sh topic. Each day/month judged once (`de:al:*`, set NX). Cron calls are recognised by `CRON_SECRET` (if set) or the vercel-cron user agent. Last 20 sent in `de:sent`.
 - 💡 Insights (`src/pages/Insights.tsx`, maths in `src/lib/insights.ts`, on the device): weather = degree-day fit (base + heat × below B + cool × above B, B 50–72 °F best fit) on 13 months of daily data (same request as Months); plan check = last 56 days hourly priced on `settings.plan` (presets are examples, not real tariffs).
+- 🚗 Cars (`settings.ev`): charging is found in hourly data by `findCharging` (`src/lib/insights.ts`, shared with the server): hours ≥ max(2.5, kW/2) above the day's 40th-percentile hour, neighbours ≥ 1.5 join, sessions need ≥ 2 h or one hour ≥ 80% of the charger. Used in Insights, Hours, and alerts (`excludeFromAlerts`: the high-day check uses house = daily − car).
+- `CRON_SECRET` can only be a Vercel env var (Vercel's cron sends it); Settings makes one to copy and shows `status.cronSecret`.
 - Do not add automated tests unless asked.

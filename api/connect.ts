@@ -12,7 +12,7 @@ export async function GET(req: Request): Promise<Response> {
   const blocked = guard(req, 'connect', 60);
   if (blocked) return blocked;
   const login = await loadLogin().catch(() => null);
-  const body: Status = { connected: !!login, email: login?.email, since: login?.since, storage: storeReady(), settings: await getSettings() };
+  const body: Status = { connected: !!login, email: login?.email, since: login?.since, storage: storeReady(), cronSecret: !!process.env.CRON_SECRET, settings: await getSettings() };
   return json(body);
 }
 

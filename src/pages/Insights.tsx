@@ -1,16 +1,23 @@
 import { useState } from 'react';
-import { ScatterChart } from '../components/Chart';
+import { BarChart, ScatterChart } from '../components/Chart';
 import { ErrorBox, Spinner, Stat, useData } from '../components/ui';
 import { getUsage, saveSettings } from '../lib/api';
-import { addDays, addMonths, hourLong, kwh, long, monthStart, money } from '../lib/dates';
-import { comparePlan, weatherFit } from '../lib/insights';
-import { PLAN_PRESETS, type Plan, type Settings } from '../lib/types';
+import { addDays, addMonths, hourLong, kwh, long, monthStart, money, short } from '../lib/dates';
+import { band, comparePlan, findCharging, weatherFit } from '../lib/insights';
+import { PLAN_PRESETS, type Plan, type Settings, type Usage } from '../lib/types';
 
-export function Insights({ serial, today, settings, onSaved }: { serial: string; today: string; settings: Settings; onSaved: () => void }) {
+type Hourly = ReturnType<typeof useData<Usage>>;
+
+export function Insights({ serial, today, settings, onSaved, onSettings }: { serial: string; today: string; settings: Settings; onSaved: () => void; onSettings: () => void }) {
+  // 8 weeks of hourly use: shared by 🚗 Car charging and ⏰ the plan check (one request).
+  const end = addDays(today, -1);
+  const start = addDays(end, -55);
+  const hourly = useData(`hh:${serial}:${start}:${end}`, () => getUsage(serial, 'HOURLY', start, end));
   return (
     <div className="space-y-4">
       <Weather serial={serial} today={today} settings={settings} />
-      <PlanCheck serial={serial} today={today} settings={settings} onSaved={onSaved} />
+      <Charging q={hourly} settings={settings} onSettings={onSettings} />
+      <PlanCheck q={hourly} settings={settings} onSaved={onSaved} />
     </div>
   );
 }
@@ -81,17 +88,99 @@ function Weather({ serial, today, settings }: { serial: string; today: string; s
   );
 }
 
+/* ---------- 🚗 Car charging ---------- */
+
+function Charging({ q, settings, onSettings }: { q: Hourly; settings: Settings; onSettings: () => void }) {
+  const ev = settings.ev;
+  if (ev.cars === 0) {
+    return (
+      <section className="card flex flex-wrap items-center gap-3 text-sm">
+        <p className="min-w-[12rem] flex-1">🚗 Electric car at home? Tell the app in Settings and it will find the charging in your use.</p>
+        <button className="btn" onClick={onSettings}>Set up</button>
+      </section>
+    );
+  }
+  let body;
+  if (q.error) body = <ErrorBox error={q.error} onRetry={q.reload} />;
+  else if (q.loading && !q.data) body = <Spinner label="Reading 8 weeks of hourly use…" />;
+  else {
+    const pts = q.data?.points ?? [];
+    const found = findCharging(pts, ev.chargerKw);
+    const days = [...new Set(pts.map((p) => p.t.slice(0, 10)))].sort();
+    const last30 = days.slice(-30);
+    const car30 = last30.reduce((s, d) => s + (found.byDay.get(d) ?? 0), 0);
+    const all30 = pts.filter((p) => last30.includes(p.t.slice(0, 10))).reduce((s, p) => s + p.kwh, 0);
+    const sessions30 = found.sessions.filter((x) => last30.includes(x.start.slice(0, 10)));
+    // When the cars charge, priced on the saved time-of-use plan.
+    const plan = settings.plan;
+    const byBand = { peak: 0, off: 0, night: 0 };
+    for (const [t, k] of found.byHour) byBand[band(plan, t.slice(0, 10), Number(t.slice(11, 13)))] += k;
+    const cheapest = Math.min(plan.offPeak, plan.nightStart !== plan.nightEnd ? plan.night : Infinity);
+    const scale = found.total > 0 ? car30 / found.total : 0;
+    const onPlanNow = (byBand.peak * plan.peak + byBand.off * plan.offPeak + byBand.night * plan.night) * scale;
+    const onPlanBest = found.total * cheapest * scale;
+    const bars = days.map((d) => ({
+      key: d,
+      value: found.byDay.get(d) ?? null,
+      label: short(d).replace(/^\w+ /, ''),
+      tip: <span><b>{kwh(found.byDay.get(d) ?? 0)}</b> car charging · {money((found.byDay.get(d) ?? 0) * settings.price)}<br />{long(d)}</span>,
+    }));
+    body = found.total < 1 ? (
+      <p className="text-sm text-muted">No charging found in the last 8 weeks. If your cars charge from a normal outlet (about 1.4 kW), it’s too small to tell apart from the house; set the charger power in Settings.</p>
+    ) : (
+      <>
+        <div className="grid grid-cols-2 gap-3">
+          <Stat label="Cars, 30 days" value={kwh(car30)} sub={`${Math.round((car30 / Math.max(1, all30)) * 100)}% of all your use`} />
+          <Stat label="Cost" value={money(car30 * settings.price)} sub={`about ${money((car30 * settings.price) / Math.max(1, ev.cars))} a car`} />
+          <Stat label="Miles (est.)" value={Math.round(car30 * ev.milesPerKwh).toLocaleString()} sub={`${money(settings.price / ev.milesPerKwh)} a mile`} />
+          <Stat label="Charges" value={String(sessions30.length)} sub={sessions30.length ? `about ${kwh(car30 / sessions30.length)} each` : undefined} />
+        </div>
+        <BarChart bars={bars} height={170} />
+        {plan.peak > cheapest && (
+          <div className="rounded-xl bg-bg p-3 text-sm">
+            <p className="label">On “{plan.name}”</p>
+            <p className="mt-1">
+              {Math.round((byBand.peak / found.total) * 100)}% of your charging is in peak hours. Charging the way you do now would cost <b>{money(onPlanNow)}</b> a month on that plan;
+              {' '}all in its cheapest hours, <b>{money(onPlanBest)}</b>
+              {onPlanNow - onPlanBest > 0.5 && <span className="text-good"> (▼ {money((onPlanNow - onPlanBest) * 12)}/year)</span>}.
+              {' '}Most cars and chargers let you schedule charging.
+            </p>
+          </div>
+        )}
+        <details className="text-sm">
+          <summary className="cursor-pointer text-muted">Recent sessions</summary>
+          <ul className="mt-2 divide-y divide-line">
+            {[...found.sessions].reverse().slice(0, 12).map((x) => (
+              <li key={x.start} className="flex justify-between gap-3 py-1.5">
+                <span>{short(x.start.slice(0, 10))}, {hourLong(Number(x.start.slice(11, 13)))} · {x.hours} h</span>
+                <span className="tabular-nums">{kwh(x.kwh)} · {money(x.kwh * settings.price)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+        <p className="text-xs text-muted">Found from your hourly use: hours far above your home’s normal level. Big heaters or a pool heater can look similar; one-hour loads like a dryer are left out.</p>
+      </>
+    );
+  }
+  return (
+    <section className="card space-y-3">
+      <div>
+        <h2 className="font-display text-lg font-semibold">🚗 Car charging</h2>
+        <p className="text-sm text-muted">{ev.cars} {ev.cars === 1 ? 'car' : 'cars'}, {ev.chargerKw} kW charging, last 8 weeks.</p>
+      </div>
+      {body}
+    </section>
+  );
+}
+
 /* ---------- ⏰ Time-of-use plan check ---------- */
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
-function PlanCheck({ serial, today, settings, onSaved }: { serial: string; today: string; settings: Settings; onSaved: () => void }) {
+function PlanCheck({ q, settings, onSaved }: { q: Hourly; settings: Settings; onSaved: () => void }) {
   const [plan, setPlan] = useState<Plan>(settings.plan);
   const [shift, setShift] = useState(0);
   const [note, setNote] = useState('');
-  const end = addDays(today, -1);
-  const start = addDays(end, -55);
-  const q = useData(`hh:${serial}:${start}:${end}`, () => getUsage(serial, 'HOURLY', start, end));
   const r = q.data ? comparePlan(q.data.points, plan, settings.price, settings.fixed) : null;
   const set = <K extends keyof Plan>(k: K, v: Plan[K]) => { setPlan({ ...plan, [k]: v }); setNote(''); };
   const save = async () => {

@@ -85,7 +85,7 @@ export default function App() {
   else if (m.error) body = <ErrorBox error={m.error} onRetry={m.reload} />;
   else if (!meter) body = <Spinner label="Finding your meter…" />;
   else if (page === 'hours') body = <Hourly serial={meter.serial} today={today} settings={status.settings} day={day || addDays(today, -1)} setDay={setDay} />;
-  else if (page === 'insights') body = <Insights serial={meter.serial} today={today} settings={status.settings} onSaved={loadStatus} />;
+  else if (page === 'insights') body = <Insights serial={meter.serial} today={today} settings={status.settings} onSaved={loadStatus} onSettings={() => setPage('settings')} />;
   else if (page === 'months') body = <Months serial={meter.serial} today={today} settings={status.settings} />;
   else body = <Overview serial={meter.serial} today={today} settings={status.settings} onDay={(d) => { setDay(d); setPage('hours'); }} />;
 
