@@ -46,6 +46,18 @@ export interface Plan {
   fixed: number;
 }
 
+/** 🚗 Electric cars charged at home (found in the hourly use: several hours well above the house's normal). */
+export interface Ev {
+  /** Number of cars; 0 = no car (nothing is looked for). */
+  cars: number;
+  /** One charger's power in kW (Level 2 is usually 7–11 kW; a normal outlet ~1.4 kW). */
+  chargerKw: number;
+  /** For the miles estimate. */
+  milesPerKwh: number;
+  /** High-use alerts look at the house without car charging. */
+  excludeFromAlerts: boolean;
+}
+
 export interface Settings {
   /** Price of one kWh, in dollars (all-in: energy + riders). */
   price: number;
@@ -55,6 +67,7 @@ export interface Settings {
   goal: number;
   alerts: Alerts;
   plan: Plan;
+  ev: Ev;
 }
 
 /** Example numbers only: the real ones are in the plan's terms (Duke or your supplier). */
@@ -70,6 +83,7 @@ export const DEFAULT_SETTINGS: Settings = {
   goal: 0,
   alerts: { on: false, pct: 40, topic: '', goal: true },
   plan: PLAN_PRESETS.peak,
+  ev: { cars: 0, chargerKw: 7.2, milesPerKwh: 3.5, excludeFromAlerts: true },
 };
 
 export interface Status {
@@ -77,5 +91,7 @@ export interface Status {
   email?: string;
   since?: string;
   storage: boolean;
+  /** CRON_SECRET is set on Vercel (only Vercel's scheduler can start the morning check). */
+  cronSecret: boolean;
   settings: Settings;
 }

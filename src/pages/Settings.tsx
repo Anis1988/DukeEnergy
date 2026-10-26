@@ -3,7 +3,7 @@ import { Chips } from '../components/ui';
 import { disconnect, getCode, getSent, saveSettings, setCode, testAlert } from '../lib/api';
 import { DEFAULT_SERVER, getServer, isNative, setServer } from '../lib/native';
 import { getTheme, setTheme, type Theme } from '../lib/prefs';
-import type { Alerts, Meter, Settings as S, Status } from '../lib/types';
+import type { Alerts, Ev, Meter, Settings as S, Status } from '../lib/types';
 
 export function Settings({ status, meters, serial, setSerial, onChange }: { status: Status; meters: Meter[]; serial: string; setSerial: (s: string) => void; onChange: () => void }) {
   const [form, setForm] = useState({ price: String(status.settings.price), fixed: String(status.settings.fixed), goal: String(status.settings.goal || '') });
@@ -66,6 +66,8 @@ export function Settings({ status, meters, serial, setSerial, onChange }: { stat
           <span className="text-sm">{saved}</span>
         </div>
       </section>
+
+      <CarsSection status={status} onChange={onChange} />
 
       <AlertsSection status={status} onChange={onChange} />
 
@@ -152,6 +154,7 @@ function AlertsSection({ status, onChange }: { status: Status; onChange: () => v
         <button className="btn" onClick={() => void test()}>Send a test</button>
         <span className="text-sm">{note}</span>
       </div>
+      <CronSecret on={status.cronSecret} />
       {sent.length > 0 && (
         <details className="text-sm">
           <summary className="cursor-pointer text-muted">Last alerts ({sent.length})</summary>
@@ -163,5 +166,78 @@ function AlertsSection({ status, onChange }: { status: Status; onChange: () => v
         </details>
       )}
     </section>
+  );
+}
+
+/** 🚗 Electric cars charged at home. */
+function CarsSection({ status, onChange }: { status: Status; onChange: () => void }) {
+  const [ev, setEv] = useState<Ev>(status.settings.ev);
+  const [form, setForm] = useState({ kw: String(ev.chargerKw), mi: String(ev.milesPerKwh) });
+  const [note, setNote] = useState('');
+  const save = async (next: Ev) => {
+    setEv(next);
+    try {
+      await saveSettings({ ev: next });
+      setNote('✅ Saved');
+      onChange();
+    } catch (e) {
+      setNote(`⚠️ ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  const num = (v: string, fallback: number) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : fallback; };
+  return (
+    <section className="card space-y-3">
+      <h2 className="font-display text-lg font-semibold">🚗 Electric cars</h2>
+      <p className="text-sm text-muted">The app finds car charging in your hourly use (several hours well above your home’s normal level) and shows its cost in 💡 Insights and ⏱️ Hours.</p>
+      <div className="grid grid-cols-3 gap-3 text-sm">
+        <label><span className="label">Cars</span>
+          <select className="input mt-1" value={ev.cars} onChange={(e) => void save({ ...ev, cars: Number(e.target.value) })}>
+            {[0, 1, 2, 3, 4].map((n) => <option key={n} value={n}>{n === 0 ? 'None' : n}</option>)}
+          </select>
+        </label>
+        <label><span className="label">Charger kW</span>
+          <input className="input mt-1" inputMode="decimal" value={form.kw} onChange={(e) => setForm({ ...form, kw: e.target.value })} onBlur={() => void save({ ...ev, chargerKw: num(form.kw, ev.chargerKw) })} />
+        </label>
+        <label><span className="label">Miles / kWh</span>
+          <input className="input mt-1" inputMode="decimal" value={form.mi} onChange={(e) => setForm({ ...form, mi: e.target.value })} onBlur={() => void save({ ...ev, milesPerKwh: num(form.mi, ev.milesPerKwh) })} />
+        </label>
+      </div>
+      <p className="text-xs text-muted">Charger kW: a wall charger (Level 2) is usually 7.2–11.5 kW; it’s on the charger or in the car’s app. Miles / kWh: about 3–4 for most cars.</p>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" className="h-4 w-4 accent-[rgb(var(--accent))]" checked={ev.excludeFromAlerts} onChange={(e) => void save({ ...ev, excludeFromAlerts: e.target.checked })} />
+        Don’t count car charging in “high use” alerts
+      </label>
+      {note && <p className="text-sm">{note}</p>}
+    </section>
+  );
+}
+
+/**
+ * CRON_SECRET lives in Vercel (only Vercel's scheduler can send it), so the app can't store it: it makes a strong
+ * one to copy and says whether Vercel has one.
+ */
+function CronSecret({ on }: { on: boolean }) {
+  const [secret, setSecret] = useState('');
+  const make = () => setSecret(Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, '0')).join(''));
+  return (
+    <details className="rounded-xl bg-bg p-3 text-sm">
+      <summary className="cursor-pointer">{on ? '✅ Morning check protected (CRON_SECRET is set)' : '🔐 Protect the morning check (optional)'}</summary>
+      <div className="mt-2 space-y-2">
+        <p className="text-muted">With a <code>CRON_SECRET</code>, only Vercel’s scheduler can start the morning check. It has to be added on Vercel (the app can’t set it):</p>
+        <ol className="list-decimal space-y-1 pl-5">
+          <li><button className="btn px-3 py-1.5" onClick={make}>Make a secret</button></li>
+          {secret && (
+            <li>
+              <div className="flex gap-2">
+                <input className="input min-w-0 flex-1 py-2 font-mono text-xs" readOnly value={secret} onFocus={(e) => e.target.select()} />
+                <button className="btn px-3 py-1.5" onClick={() => void navigator.clipboard?.writeText(secret)}>Copy</button>
+              </div>
+            </li>
+          )}
+          <li>Vercel → your project → <b>Settings → Environment Variables</b> → Add: name <code>CRON_SECRET</code>, value = the secret → Save.</li>
+          <li><b>Deployments</b> → ⋯ on the latest → <b>Redeploy</b>. This line then shows ✅.</li>
+        </ol>
+      </div>
+    </details>
   );
 }

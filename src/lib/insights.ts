@@ -115,3 +115,81 @@ export function weatherFit(points: Point[]): WeatherFit | null {
   }
   return best;
 }
+
+/* ---------- 🚗 Car charging ---------- */
+
+export interface Session {
+  start: string; // "2026-10-24T22"
+  hours: number;
+  kwh: number;
+}
+export interface EvFound {
+  /** Car kWh per hour ("2026-10-24T22" → kWh). */
+  byHour: Map<string, number>;
+  /** Car kWh per day. */
+  byDay: Map<string, number>;
+  sessions: Session[];
+  total: number;
+}
+
+/**
+ * Car charging shows as hours far above the house's normal level for that day. Normal = the 40th percentile of the
+ * day's hours. An hour counts when it is at least half a charger (≥ 2.5 kWh) above normal; its neighbours join
+ * when ≥ 1.5 kWh above (charging starts and stops mid-hour). Single hours count only when they are big (≥ 80% of
+ * a charger), so a dryer or oven isn't mistaken for a car. Only the part above normal is the car's.
+ */
+export function findCharging(points: Point[], chargerKw: number): EvFound {
+  const days = new Map<string, Point[]>();
+  for (const p of points) {
+    const d = p.t.slice(0, 10);
+    if (!days.has(d)) days.set(d, []);
+    days.get(d)!.push(p);
+  }
+  const normal = new Map<string, number>();
+  for (const [d, list] of days) {
+    const v = list.map((p) => p.kwh).sort((a, b) => a - b);
+    normal.set(d, v[Math.floor(v.length * 0.4)] ?? 0);
+  }
+  const strong = Math.max(2.5, chargerKw * 0.5);
+  const sorted = [...points].sort((a, b) => (a.t < b.t ? -1 : 1));
+  const above = (p: Point) => p.kwh - (normal.get(p.t.slice(0, 10)) ?? 0);
+  const flag = sorted.map((p) => above(p) >= strong);
+  // Neighbours of a strong hour join while they stay ≥ 1.5 kWh above normal.
+  for (let pass = 0; pass < 2; pass++)
+    for (let i = 0; i < sorted.length; i++)
+      if (!flag[i] && above(sorted[i]) >= 1.5 && ((i > 0 && flag[i - 1] && next(sorted[i - 1].t) === sorted[i].t) || (i + 1 < sorted.length && flag[i + 1] && next(sorted[i].t) === sorted[i + 1].t))) flag[i] = true;
+
+  const out: EvFound = { byHour: new Map(), byDay: new Map(), sessions: [], total: 0 };
+  let cur: { idx: number[] } | null = null;
+  const close = () => {
+    if (!cur) return;
+    const kwh = cur.idx.reduce((s, i) => s + above(sorted[i]), 0);
+    const big = cur.idx.some((i) => above(sorted[i]) >= chargerKw * 0.8);
+    if (cur.idx.length >= 2 || big) {
+      out.sessions.push({ start: sorted[cur.idx[0]].t, hours: cur.idx.length, kwh });
+      for (const i of cur.idx) {
+        const k = above(sorted[i]);
+        out.byHour.set(sorted[i].t, k);
+        const d = sorted[i].t.slice(0, 10);
+        out.byDay.set(d, (out.byDay.get(d) ?? 0) + k);
+        out.total += k;
+      }
+    }
+    cur = null;
+  };
+  for (let i = 0; i < sorted.length; i++) {
+    if (!flag[i]) { close(); continue; }
+    if (cur && next(sorted[cur.idx[cur.idx.length - 1]].t) !== sorted[i].t) close();
+    cur ??= { idx: [] };
+    cur.idx.push(i);
+  }
+  close();
+  return out;
+}
+
+/** The hour after "YYYY-MM-DDTHH". */
+function next(t: string): string {
+  const d = new Date(`${t.slice(0, 10)}T${t.slice(11, 13)}:00:00Z`);
+  d.setUTCHours(d.getUTCHours() + 1);
+  return d.toISOString().slice(0, 13);
+}
