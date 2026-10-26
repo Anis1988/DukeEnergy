@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ErrorBox, Spinner, clearData, useData } from './components/ui';
 import { ApiError, getCode, getMeters, getStatus, setCode } from './lib/api';
 import { addDays } from './lib/dates';
+import { getServer, isNative, setServer } from './lib/native';
 import { getMeter, setMeter } from './lib/prefs';
 import type { Status } from './lib/types';
 import { Connect } from './pages/Connect';
@@ -68,7 +69,12 @@ export default function App() {
 
   let body;
   if (needCode) body = <AccessCode onDone={() => setNeedCode(false)} />;
-  else if (statusError) body = <ErrorBox error={statusError} onRetry={loadStatus} />;
+  else if (statusError) body = (
+    <div className="mx-auto max-w-sm space-y-4">
+      <ErrorBox error={statusError} onRetry={loadStatus} />
+      {isNative() && <form className="card space-y-3" onSubmit={(e) => { e.preventDefault(); loadStatus(); }}><ServerField /><button className="btn-primary w-full">Try this address</button></form>}
+    </div>
+  );
   else if (!status) body = <Spinner />;
   else if (page === 'guide') body = <Guide />;
   else if (!status.storage) body = <SetupNeeded />;
@@ -113,6 +119,7 @@ function AccessCode({ onDone }: { onDone: () => void }) {
   const [code, setC] = useState(getCode());
   return (
     <form className="card mx-auto max-w-sm space-y-3" onSubmit={(e) => { e.preventDefault(); setCode(code); onDone(); }}>
+      {isNative() && <ServerField />}
       <h2 className="font-display text-lg font-semibold">🔒 Access code</h2>
       <p className="text-sm text-muted">The password you set as <code>APP_ACCESS_TOKEN</code> on Vercel. Asked once per device.</p>
       <input className="input" type="password" autoFocus value={code} onChange={(e) => setC(e.target.value)} />
@@ -127,5 +134,17 @@ function SetupNeeded() {
       <h2 className="font-display text-lg font-semibold">One more step on Vercel</h2>
       <p>The app needs a small free database to keep your Duke login: Vercel → your project → <b>Storage</b> → Create → <b>Upstash for Redis</b> → connect it to this project, then <b>Redeploy</b>.</p>
     </section>
+  );
+}
+
+/** Android app: the address of your Watt Watch website (Vercel), where the app's data comes from. */
+function ServerField() {
+  const [server, setS] = useState(getServer());
+  return (
+    <label className="block text-sm">
+      <span className="label">Your site’s address</span>
+      <input className="input mt-1" inputMode="url" autoCapitalize="off" autoCorrect="off" value={server} placeholder="https://your-site.vercel.app" onChange={(e) => { setS(e.target.value); setServer(e.target.value); }} />
+      <span className="mt-1 block text-xs text-muted">The address you open Watt Watch at in a browser (Vercel → your project → Domains).</span>
+    </label>
   );
 }
