@@ -35,6 +35,15 @@ export function Guide() {
         <p>The last 13 months side by side, with the average outside temperature, so you can compare this month with the same month last year.</p>
       </section>
       <section className="card space-y-2">
+        <h3 className="font-semibold">💡 Insights</h3>
+        <p><b>🌡️ Weather effect:</b> each dot is a day (outside temperature → kWh). From them the app works out what one degree colder or hotter costs you a day, and how much of your year went to heating and cooling. “For their weather” tells you if the last 30 days were more or less than the weather explains.</p>
+        <p><b>⏰ Time-of-use plan:</b> some plans charge more in the afternoon peak and less at night. Pick an example or type in a real offer’s hours and prices; the app prices your real hour-by-hour use from the last 8 weeks on it and compares with what you pay now. The slider shows what moving some use (laundry, dishwasher, car charging) out of the peak would change.</p>
+      </section>
+      <section className="card space-y-2">
+        <h3 className="font-semibold">🔔 Alerts</h3>
+        <p>In ⚙️ Settings → Alerts: install the free ntfy app, subscribe to your topic, switch alerts on. Each morning you get a notification if yesterday was much higher than usual (you choose how much), if the month is heading over your goal, or if the Duke connection needs you.</p>
+      </section>
+      <section className="card space-y-2">
         <h3 className="font-semibold">💲 Costs</h3>
         <p>Set your price per kWh and basic charge in ⚙️ Settings (look at a recent bill). All costs are estimates.</p>
       </section>

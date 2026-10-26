@@ -5,7 +5,7 @@ export function Stat({ label, value, sub, tone }: { label: string; value: ReactN
   return (
     <div className="card min-w-0 p-3.5">
       <p className="label truncate">{label}</p>
-      <p className="mt-1 truncate font-display text-2xl font-semibold tabular-nums">{value}</p>
+      <p className="mt-1 truncate font-display text-xl font-semibold sm:text-2xl tabular-nums">{value}</p>
       {sub && <p className={`mt-0.5 text-xs ${tone === 'good' ? 'text-good' : tone === 'warn' ? 'text-warn' : tone === 'bad' ? 'text-bad' : 'text-muted'}`}>{sub}</p>}
     </div>
   );

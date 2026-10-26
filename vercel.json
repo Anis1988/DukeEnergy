@@ -28,6 +28,20 @@
       ]
     }
   ],
+  "crons": [
+    {
+      "path": "/api/alerts",
+      "schedule": "0 13 * * *"
+    }
+  ],
+  "functions": {
+    "api/usage.ts": {
+      "maxDuration": 120
+    },
+    "api/alerts.ts": {
+      "maxDuration": 120
+    }
+  },
   "git": {
     "deploymentEnabled": {
       "android": false

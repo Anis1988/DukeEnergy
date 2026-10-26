@@ -19,6 +19,12 @@ or the Android app from the `android` branch).
    expected, copy that page's address, come back and paste it. (The Android app does this part by itself.)
 6. ⚙️ Settings → your price per kWh and basic charge (from a recent bill).
 
+## Alerts
+
+⚙️ Settings → 🔔 Alerts: install the free **ntfy** app, subscribe to the topic shown, switch alerts on. Vercel runs the
+check every morning (cron in `vercel.json`, ~9 AM Eastern). Optional: set `CRON_SECRET` in Vercel so only Vercel's
+cron can trigger it.
+
 ## Android app
 
 Branch `android` builds an APK on GitHub (Actions → "Android app"), published on the `android-latest` release: open
