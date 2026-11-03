@@ -18,6 +18,8 @@ const TZ = 'America/New_York';
 
 const LOGIN = 'de:login';
 const METERS = 'de:meters';
+/** The last meter list that worked, kept with no expiry: usage keeps working if Duke's account lookup breaks. */
+const METERS_LAST = 'de:meters:last';
 const LOCK = 'de:lock';
 
 export class DukeError extends Error {
@@ -71,6 +73,7 @@ const saveLogin = async (l: Login) => void (await db()?.set(LOGIN, l));
 export async function disconnect(): Promise<void> {
   await db()?.del(LOGIN);
   await db()?.del(METERS);
+  await db()?.del(METERS_LAST);
 }
 
 /** Step 2 of connecting: the code from the address Duke landed on (+ the secret made on the device in step 1). */
@@ -148,7 +151,14 @@ async function call<T>(method: 'GET' | 'POST', path: string, data: Record<string
       body: method === 'POST' ? JSON.stringify(data) : undefined,
     });
     if (r.status === 401 && attempt === 0) continue; // the API token was refused: get a fresh one once
-    if (!r.ok) throw new DukeError(`Duke's server answered ${r.status} (${path}).`, r.status === 401 ? 401 : 502, r.status === 401);
+    if (!r.ok) {
+      // Duke's own JSON message when there is one (an HTML page means its network edge refused the request).
+      const body = await r.text().catch(() => '');
+      let why = '';
+      try { why = String(JSON.parse(body).message ?? '').slice(0, 120); } catch { why = /<html/i.test(body) ? 'blocked by Duke’s network' : ''; }
+      const hint = r.status === 403 || r.status === 404 ? ' Duke may have changed its app; Watt Watch needs an update for this.' : '';
+      throw new DukeError(`Duke's server answered ${r.status} (${path}${why ? `: ${why}` : ''}).${hint}`, r.status === 401 ? 401 : 502, r.status === 401);
+    }
     return (await r.json()) as T;
   }
 }
@@ -157,30 +167,59 @@ async function call<T>(method: 'GET' | 'POST', path: string, data: Record<string
 
 type RawMeter = Record<string, any> & { account: Record<string, any> };
 
+/**
+ * Your accounts and their meters. Duke moved the account lookup on Oct 29, 2026 (`/account-list`, which now answers
+ * 403, became `/account/list`), spells "BP" in capitals and may leave out the source IDs that the other requests
+ * still need: they are filled in the same way as aiodukeenergy-co 1.3.2 (github.com/crash0verride11/aiodukeenergy).
+ */
+async function fetchMeters(): Promise<RawMeter[]> {
+  const { login } = await apiToken();
+  const list = await call<{ accounts?: Record<string, any>[]; relatedBPNumber?: string; relatedBpNumber?: string }>('GET', '/account/list', {
+    email: login.email ?? '',
+    internalUserID: login.userId ?? '',
+    fetchFreshData: 'true',
+  });
+  const relatedBp = list.relatedBPNumber || list.relatedBpNumber || '';
+  const out: RawMeter[] = [];
+  for (const raw of list.accounts ?? []) {
+    const acc: Record<string, any> = {
+      ...raw,
+      primaryBpNumber: raw.primaryBPNumber || raw.primaryBpNumber || '',
+      srcSysCd: raw.srcSysCd || 'ISU',
+      srcAcctId: raw.srcAcctId || raw.accountNumber,
+      srcAcctId2: raw.srcAcctId2 || '',
+    };
+    const details = await call<{ meterInfo?: Record<string, any>[] }>('GET', '/account-details-v2', {
+      email: login.email ?? '',
+      srcSysCd: acc.srcSysCd,
+      srcAcctId: String(acc.srcAcctId ?? ''),
+      primaryBpNumber: acc.primaryBpNumber,
+      relatedBpNumber: relatedBp,
+    });
+    for (const m of details.meterInfo ?? []) out.push({ ...m, account: acc });
+  }
+  return out;
+}
+
 async function rawMeters(fresh = false): Promise<RawMeter[]> {
   if (!fresh) {
     const cached = await db()?.get<RawMeter[]>(METERS);
     if (cached?.length) return cached;
   }
-  const { login } = await apiToken();
-  const list = await call<{ accounts: Record<string, any>[]; relatedBpNumber: string }>('GET', '/account-list', {
-    email: login.email ?? '',
-    internalUserID: login.userId ?? '',
-    fetchFreshData: 'true',
-  });
-  const out: RawMeter[] = [];
-  for (const acc of list.accounts ?? []) {
-    const details = await call<{ meterInfo?: Record<string, any>[] }>('GET', '/account-details-v2', {
-      email: login.email ?? '',
-      srcSysCd: acc.srcSysCd,
-      srcAcctId: acc.srcAcctId,
-      primaryBpNumber: acc.primaryBpNumber,
-      relatedBpNumber: list.relatedBpNumber,
-    });
-    for (const m of details.meterInfo ?? []) out.push({ ...m, account: acc });
+  try {
+    const out = await fetchMeters();
+    if (out.length) {
+      await db()?.set(METERS, out, { ex: 12 * 3600 });
+      await db()?.set(METERS_LAST, out);
+    }
+    return out;
+  } catch (e) {
+    // A logged-out Duke login must still ask you to connect again; anything else falls back to the last good list.
+    if (e instanceof DukeError && e.relogin) throw e;
+    const last = await db()?.get<RawMeter[]>(METERS_LAST);
+    if (last?.length) return last;
+    throw e;
   }
-  await db()?.set(METERS, out, { ex: 12 * 3600 });
-  return out;
 }
 
 export async function meters(fresh = false): Promise<Meter[]> {
