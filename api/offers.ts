@@ -3,6 +3,7 @@ import { guard, json } from '../server/guard.js';
 import { getOffers } from '../server/offers.js';
 import { checkId, cleanSituation, getCheck, listChecks, offerId, runCheck, startCheck, takeDailySlot } from '../server/aicheck.js';
 import { getSettings } from '../server/store.js';
+import { MASTER_AI_TEXT, masterSwitch } from '../server/masterSwitch.js';
 import type { AiCheck } from '../src/lib/types.js';
 
 /** A check that never finished (the server stopped it at its 5-minute limit) shows as failed. */
@@ -48,6 +49,7 @@ export async function POST(req: Request): Promise<Response> {
   if (existing?.status === 'running' && Date.now() - Date.parse(existing.startedAt) < 6 * 60_000) return json(existing);
   if (existing?.status === 'done' && !b.fresh) return json({ ...existing, saved: true });
   if (!process.env.ANTHROPIC_API_KEY) return json({ error: 'Add ANTHROPIC_API_KEY in Vercel (Settings → Environment Variables), then redeploy.' }, 503);
+  if ((await masterSwitch()).ai) return json({ error: MASTER_AI_TEXT }, 423); // 🎛️ AI switched off from Master
   if (!(await takeDailySlot())) return json({ error: `Today’s AI checks are used up (${process.env.AI_CHECK_DAILY_LIMIT ?? 10} a day). Try again tomorrow.` }, 429);
   const { ai } = await getSettings();
   const started = await startCheck(id, offer, ai);

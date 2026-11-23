@@ -1,5 +1,6 @@
 import { DukeError, meters, today, usage } from './duke.js';
 import { db, getSettings } from './store.js';
+import { MASTER_PAUSED_TEXT, masterSwitch } from './masterSwitch.js';
 import { findCharging } from '../src/lib/insights.js';
 
 /**
@@ -31,7 +32,9 @@ async function first(key: string): Promise<boolean> {
   return got !== null;
 }
 
-export async function runAlerts(): Promise<{ checked: string[]; sent: string[] }> {
+export async function runAlerts(): Promise<{ checked: string[]; sent: string[]; skipped?: string }> {
+  // 🎛️ Paused from Master (the owner's apps dashboard): no check, no notification.
+  if ((await masterSwitch()).work) return { checked: [], sent: [], skipped: MASTER_PAUSED_TEXT };
   const s = await getSettings();
   const out = { checked: [] as string[], sent: [] as string[] };
   if (!s.alerts.on || !s.alerts.topic) return out;
